@@ -1,0 +1,29 @@
+{
+  "name": "paios-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@tailwindcss/forms": "latest",
+    "@vitejs/plugin-react": "latest",
+    "autoprefixer": "latest",
+    "axios": "latest",
+    "postcss": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "react-markdown": "latest",
+    "react-router-dom": "latest",
+    "react-syntax-highlighter": "latest",
+    "tailwindcss": "latest",
+    "vite": "latest",
+    "zustand": "latest"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.1"
+  }
+}
