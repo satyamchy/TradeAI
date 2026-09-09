@@ -11,18 +11,20 @@ from app.api import (
     trading_routes,
     stock_analysis_routes,
     conversation,
+    snapshots,
 )
 from app.config import settings
 from app.database import init_db as init_legacy_db
 from app.db.base import init_db as init_app_db
 
 app = FastAPI(
-    title="StockAI - Indian Stock Market Analyzer",
+    title="TradeAI / StockAI - Indian Stock Market Analyzer",
     debug=settings.app_debug,
     description=(
         "AI-powered Indian Stock Market Analyzer & Trading Platform. "
         "Covers NSE/BSE equities, Gold, Silver with DhanHQ broker integration, "
-        "AI agent-driven analysis, intraday auto-squareoff, and trading guardrails."
+        "LangGraph agent-driven decision support, active position background watchdogs, "
+        "intraday auto-squareoff, and safety guardrails."
     ),
     version="2.0.0",
 )
@@ -44,19 +46,27 @@ async def on_startup():
 
 @app.get("/health", tags=["health"])
 async def health_check():
-    return {"status": "ok", "app": "OneAI Indian Stock Market Analyzer v2.0"}
+    """
+    Service health check endpoint.
+    - **Method**: GET
+    - **Response**: `{"status": "ok", "app": "TradeAI Indian Stock Market Analyzer v2.0"}`
+    """
+    return {"status": "ok", "app": "TradeAI Indian Stock Market Analyzer v2.0"}
 
 
-# API Routers
+# ── Stock Analytics & Market Data Routers ──────────────────────────────
 app.include_router(stock_analysis_routes.router, prefix="/api/v1")
 app.include_router(data_routes.router, prefix=settings.api_version_prefix)
 app.include_router(analysis_routes.router, prefix=settings.api_version_prefix)
 app.include_router(market_routes.router, prefix=settings.api_version_prefix)
+app.include_router(snapshots.router, prefix=settings.api_version_prefix)
+
+# ── Trading & Brokerage Routers ────────────────────────────────────────
 app.include_router(trading_routes.router, prefix=settings.api_version_prefix)
 app.include_router(trade_routes.router, prefix=settings.api_version_prefix)
 app.include_router(job_routes.router, prefix=settings.api_version_prefix)
 
-# Conversation Router
+# ── Conversational LangGraph AI Agent Routers ──────────────────────────
 app.include_router(conversation.router, prefix="/api/conversation")
 app.include_router(conversation.router, prefix="/v1/conversation")
 

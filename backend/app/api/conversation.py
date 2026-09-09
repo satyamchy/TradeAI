@@ -1,4 +1,13 @@
-﻿from typing import List, Optional, Any, Dict
+﻿"""
+Conversation API Router.
+Provides conversational multi-horizon decision support for Indian stocks.
+
+Endpoints:
+- POST /api/conversation: Primary conversational endpoint. Parses queries, invokes LangGraph, returns analysis.
+- GET  /api/conversation: Backwards-compatible GET query handler.
+"""
+
+from typing import List, Optional, Any, Dict
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
@@ -13,11 +22,29 @@ router = APIRouter(tags=["conversation"])
 
 
 class ChatRequest(BaseModel):
+    """
+    Inbound conversation query payload.
+    
+    Fields:
+    - query (str, required): Natural language question or command (e.g. 'Analyze TCS for intraday trading').
+    - ticker (str, optional): Optional explicit ticker symbol (e.g. 'TCS.NS', 'RELIANCE.NS').
+    """
     query: str = Field(..., description="Inbound user query for the AI agent")
     ticker: Optional[str] = Field(None, description="Optional target ticker symbol")
 
 
 class ChatResponse(BaseModel):
+    """
+    Structured conversational response.
+    
+    Fields:
+    - query (str): The original user query.
+    - answer (str): Markdown-formatted multi-horizon analysis and AI reasoning.
+    - sources (List[Source]): Retrieved citations and data references.
+    - structured_data (Optional[Dict[str, Any]]): Structured financial indicator payload if a stock tool was invoked.
+    - success (bool): True if execution completed without fatal errors.
+    - message (str): Status message ('ok' or error detail).
+    """
     query: str
     answer: str
     sources: List[Source] = []
@@ -30,9 +57,28 @@ class ChatResponse(BaseModel):
 @router.post("/", response_model=ChatResponse)
 async def process_conversation(req: ChatRequest):
     """
-    Parses inbound user queries, dynamically maps them onto an active
-    TradingGraphState dictionary, invokes trading_compiled_graph.ainvoke,
-    tracks lifecycle events via log_agent_event, and serves back a structured ChatResponse.
+    Processes natural language trading queries through the compiled LangGraph pipeline.
+
+    - **Purpose**: Full-cycle AI financial analysis evaluating live quotes, technical indicators, and news.
+    - **Method**: POST
+    - **Payload**:
+      ```json
+      {
+        "query": "What is the intraday trend and support/resistance for Reliance?",
+        "ticker": "RELIANCE.NS"
+      }
+      ```
+    - **Response**:
+      ```json
+      {
+        "query": "...",
+        "answer": "### Multi-Horizon Analysis for RELIANCE.NS\n- **Intraday Bias**: Bullish...",
+        "sources": [{"title": "Market Data Tool (stock_analyzer)", "url": "...", "snippet": "..."}],
+        "structured_data": {"ticker": "RELIANCE.NS", "current_price": 1294.9, "indicators": {...}},
+        "success": true,
+        "message": "ok"
+      }
+      ```
     """
     user_query = req.query.strip()
     if not user_query:
@@ -123,8 +169,13 @@ async def process_conversation(req: ChatRequest):
         raise HTTPException(status_code=500, detail=str(exc))
 
 
-# Backward compatibility GET handler
 @router.get("", response_model=ChatResponse)
 @router.get("/", response_model=ChatResponse)
 async def get_conversation(query: str):
+    """
+    Backwards-compatible GET query handler.
+    - **Method**: GET
+    - **Query Param**: `query` (string)
+    - **Response**: `ChatResponse` model.
+    """
     return await process_conversation(ChatRequest(query=query))

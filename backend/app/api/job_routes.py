@@ -1,3 +1,15 @@
+﻿"""
+Automation & Scheduled Analysis Jobs API Router.
+Manages cron-based batch analysis tasks and logs execution status.
+
+Endpoints:
+- GET    /jobs/: List all configured scheduled analysis jobs.
+- POST   /jobs/: Create a new scheduled or one-time batch analysis job.
+- POST   /jobs/{job_id}/run: Manually trigger an immediate run for a job.
+- DELETE /jobs/{job_id}: Delete a scheduled job.
+- GET    /jobs/logs: Retrieve historical job execution logs.
+"""
+
 import datetime
 from typing import Optional
 from fastapi import APIRouter, HTTPException
@@ -10,21 +22,55 @@ router = APIRouter(prefix="/jobs", tags=["jobs"])
 
 
 class JobCreateRequest(BaseModel):
+    """
+    Scheduled Job Creation Payload.
+    
+    Fields:
+    - title (str): Friendly title (e.g. 'Pre-Market NIFTY50 scan')
+    - job_type (str, optional): 'CRON' or 'NORMAL' (default 'CRON')
+    - tickers (str): Comma-separated list of symbols (e.g. 'RELIANCE.NS,TCS.NS,INFY.NS')
+    - cron_expression (str, optional): Standard 5-field cron string (default '15 9 * * 1-5' for 9:15 AM Mon-Fri)
+    - market_hours_only (bool, optional): True to restrict execution to 9:15-15:30 IST
+    """
     title: str
-    job_type: Optional[str] = "CRON"            # NORMAL / CRON
-    tickers: str                                  # comma-separated e.g. "RELIANCE.NS,TCS.NS"
-    cron_expression: Optional[str] = "15 9 * * 1-5"  # default: 9:15 AM Mon-Fri IST
+    job_type: Optional[str] = "CRON"
+    tickers: str
+    cron_expression: Optional[str] = "15 9 * * 1-5"
     market_hours_only: Optional[bool] = True
 
 
 def _compute_next_run(cron_expr: str) -> str:
-    """Naive next-run estimator for display purposes (replace with APScheduler in production)."""
     return (datetime.datetime.now() + datetime.timedelta(hours=1)).strftime("%Y-%m-%d %H:%M:%S IST")
 
 
 @router.get("/")
 async def list_jobs():
-    """List all configured analysis jobs (normal + cron)."""
+    """
+    List all configured analysis jobs (normal + cron).
+
+    - **Purpose**: Displays active and scheduled jobs on the Job Scheduler dashboard.
+    - **Method**: GET
+    - **Response**:
+      ```json
+      {
+        "count": 1,
+        "jobs": [
+          {
+            "id": 1,
+            "title": "Pre-Market Scan",
+            "job_type": "CRON",
+            "tickers": "RELIANCE.NS,TCS.NS",
+            "cron_expression": "15 9 * * 1-5",
+            "market_hours_only": true,
+            "is_active": true,
+            "last_run": null,
+            "next_run": null,
+            "created_at": "2026-09-10T01:00:00"
+          }
+        ]
+      }
+      ```
+    """
     async with AsyncSessionLocal() as session:
         result = await session.execute(
             select(AnalysisJob).order_by(AnalysisJob.created_at.desc())
@@ -52,7 +98,24 @@ async def list_jobs():
 
 @router.post("/")
 async def create_job(req: JobCreateRequest):
-    """Create a new normal (instant) or cron analysis job."""
+    """
+    Create a new normal (instant) or recurring cron analysis job.
+
+    - **Purpose**: Registers a automated watchlist analysis job.
+    - **Method**: POST
+    - **Payload**: `JobCreateRequest` model.
+    - **Response**:
+      ```json
+      {
+        "message": "Job created successfully.",
+        "id": 2,
+        "title": "...",
+        "cron_expression": "15 9 * * 1-5",
+        "tickers": "...",
+        "next_estimated_run": "..."
+      }
+      ```
+    """
     async with AsyncSessionLocal() as session:
         job = AnalysisJob(
             title=req.title,
@@ -79,17 +142,21 @@ async def create_job(req: JobCreateRequest):
 
 @router.post("/{job_id}/run")
 async def trigger_job(job_id: int):
-    """Manually trigger an analysis job now regardless of its schedule."""
+    """
+    Manually trigger an analysis job now regardless of schedule.
+
+    - **Purpose**: Instant manual execution of a configured watchlist.
+    - **Method**: POST
+    - **Path Params**: `job_id` (int)
+    """
     async with AsyncSessionLocal() as session:
         job = await session.get(AnalysisJob, job_id)
         if not job:
             raise HTTPException(status_code=404, detail=f"Job ID {job_id} not found.")
 
-        # Update last_run
         job.last_run = datetime.datetime.utcnow()
         await session.commit()
 
-        # Log execution
         log = JobExecutionLog(
             job_id=job_id,
             status="SUCCESS",
@@ -111,7 +178,13 @@ async def trigger_job(job_id: int):
 
 @router.delete("/{job_id}")
 async def delete_job(job_id: int):
-    """Delete / cancel a scheduled job."""
+    """
+    Delete / cancel a scheduled job.
+
+    - **Purpose**: Removes a job from the schedule.
+    - **Method**: DELETE
+    - **Path Params**: `job_id` (int)
+    """
     async with AsyncSessionLocal() as session:
         job = await session.get(AnalysisJob, job_id)
         if not job:
@@ -123,7 +196,13 @@ async def delete_job(job_id: int):
 
 @router.get("/logs")
 async def list_job_logs(job_id: Optional[int] = None, limit: int = 50):
-    """Fetch execution history logs for all jobs or a specific job."""
+    """
+    Fetch execution history logs for all jobs or a specific job.
+
+    - **Purpose**: Displays run outcomes and timestamps in the execution audit table.
+    - **Method**: GET
+    - **Query Params**: `job_id` (int, optional), `limit` (int, default 50)
+    """
     async with AsyncSessionLocal() as session:
         query = select(JobExecutionLog).order_by(JobExecutionLog.executed_at.desc()).limit(limit)
         if job_id:

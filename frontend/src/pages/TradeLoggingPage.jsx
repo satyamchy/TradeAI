@@ -26,12 +26,14 @@ const emptyForm = {
 // ── Summary Card ──────────────────────────────────────────────────────────────
 function SummaryCard({ label, value, sub, color }) {
   return (
-    <div className="card p-4">
-      <div className="text-xs mb-1" style={{ color: '#8899b3' }}>{label}</div>
-      <div className={`text-xl font-bold ${color || ''}`} style={!color ? { color: '#e8f0fe' } : {}}>
-        {value}
+    <div className="card p-4 flex flex-col justify-between">
+      <div>
+        <div className="text-[11px] font-semibold tracking-wider uppercase mb-1" style={{ color: '#A89F91' }}>{label}</div>
+        <div className={`text-2xl font-black font-mono ${color || ''}`} style={!color ? { color: '#F5EBE1' } : {}}>
+          {value}
+        </div>
       </div>
-      {sub && <div className="text-xs mt-0.5" style={{ color: '#8899b3' }}>{sub}</div>}
+      {sub && <div className="text-xs font-mono mt-2" style={{ color: '#A89F91' }}>{sub}</div>}
     </div>
   );
 }
@@ -39,41 +41,46 @@ function SummaryCard({ label, value, sub, color }) {
 // ── Open Position Row ─────────────────────────────────────────────────────────
 function PositionRow({ pos, onSquareOff }) {
   const [exitPrice, setExitPrice] = useState('');
-  const pnlColor = pos.unrealized_pnl >= 0 ? 'text-green-400' : 'text-red-400';
+  const pnlColor = pos.unrealized_pnl >= 0 ? 'text-[#00E676]' : 'text-[#FF4D4D]';
   return (
-    <tr className="table-row-hover border-b" style={{ borderColor: '#1a2d4a' }}>
-      <td className="px-3 py-2 font-semibold text-sm" style={{ color: '#e8f0fe' }}>{pos.symbol}</td>
-      <td className="px-3 py-2">
-        <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${pos.trade_type === 'BUY' ? 'badge-green' : 'badge-red'}`}>
+    <tr className="table-row-hover border-b" style={{ borderColor: 'rgba(56, 46, 38, 0.4)' }}>
+      <td className="px-3 py-2.5 font-bold font-mono text-sm" style={{ color: '#F5EBE1' }}>{pos.symbol}</td>
+      <td className="px-3 py-2.5">
+        <span className={`px-2 py-0.5 rounded text-xs font-bold ${pos.trade_type === 'BUY' ? 'badge-green' : 'badge-red'}`}>
           {pos.trade_type}
         </span>
       </td>
-      <td className="px-3 py-2 text-xs" style={{ color: '#8899b3' }}>{pos.product_type}</td>
-      <td className="px-3 py-2 text-sm font-mono" style={{ color: '#e8f0fe' }}>₹{pos.entry_price}</td>
-      <td className="px-3 py-2 text-sm font-mono" style={{ color: '#e8f0fe' }}>₹{pos.current_price}</td>
-      <td className={`px-3 py-2 text-sm font-bold font-mono ${pnlColor}`}>
+      <td className="px-3 py-2.5 text-xs font-mono" style={{ color: '#A89F91' }}>{pos.product_type}</td>
+      <td className="px-3 py-2.5 text-xs font-mono" style={{ color: '#F5EBE1' }}>₹{pos.entry_price}</td>
+      <td className="px-3 py-2.5 text-xs font-mono" style={{ color: '#F5EBE1' }}>₹{pos.current_price}</td>
+      <td className={`px-3 py-2.5 text-xs font-bold font-mono ${pnlColor}`}>
         {pos.unrealized_pnl >= 0 ? '+' : ''}₹{pos.unrealized_pnl}
       </td>
-      <td className="px-3 py-2">
+      <td className="px-3 py-2.5">
         {pos.needs_auto_squareoff && (
-          <span className="px-2 py-0.5 rounded text-xs font-bold badge-red animate-pulse">AUTO EXIT</span>
+          <span className="px-2 py-0.5 rounded text-[10px] font-bold badge-red animate-pulse">AUTO EXIT</span>
         )}
         {pos.recommendation === 'WATCH_STOP_LOSS' && (
-          <span className="px-2 py-0.5 rounded text-xs badge-amber">STOP WATCH</span>
+          <span className="px-2 py-0.5 rounded text-[10px] badge-amber font-bold">STOP WATCH</span>
+        )}
+        {!pos.needs_auto_squareoff && pos.recommendation !== 'WATCH_STOP_LOSS' && (
+          <span className="text-[11px] font-mono" style={{ color: '#A89F91' }}>HOLDING</span>
         )}
       </td>
-      <td className="px-3 py-2 flex gap-2 items-center">
-        <input
-          value={exitPrice} onChange={e => setExitPrice(e.target.value)}
-          placeholder="Exit ₹" className="w-20 rounded px-2 py-1 text-xs outline-none"
-          style={{ background: '#060b14', border: '1px solid #1a2d4a', color: '#e8f0fe' }}
-        />
-        <button
-          onClick={() => onSquareOff(pos.trade_id, exitPrice)}
-          className="px-2 py-1 rounded text-xs font-bold transition-all hover:opacity-90"
-          style={{ background: '#ff1744', color: '#fff' }}>
-          Exit
-        </button>
+      <td className="px-3 py-2.5">
+        <div className="flex gap-2 items-center">
+          <input
+            value={exitPrice} onChange={e => setExitPrice(e.target.value)}
+            placeholder="Exit ₹" className="w-20 rounded px-2 py-1 text-xs font-mono outline-none"
+            style={{ background: '#12100E', border: '1px solid #382E26', color: '#F5EBE1' }}
+          />
+          <button
+            onClick={() => onSquareOff(pos.trade_id, exitPrice)}
+            className="px-2.5 py-1 rounded text-xs font-bold transition-all hover:opacity-90"
+            style={{ background: '#FF4D4D', color: '#FFFFFF' }}>
+            Exit
+          </button>
+        </div>
       </td>
     </tr>
   );
@@ -206,67 +213,74 @@ export default function TradeLoggingPage() {
     }
   };
 
-  const pnlColor = summary?.realized_pnl_inr >= 0 ? 'text-green-400' : 'text-red-400';
+  const pnlColor = (summary?.realized_pnl_inr || 0) >= 0 ? 'text-[#00E676]' : 'text-[#FF4D4D]';
 
   return (
     <div className="p-4 max-w-7xl mx-auto space-y-4">
-      {/* Toast */}
+      {/* Toast Alert */}
       {toast && (
-        <div className="fixed top-20 right-4 z-50 px-4 py-2 rounded-lg text-sm font-medium shadow-xl"
-             style={{ background: '#0c1526', border: '1px solid #2979ff', color: '#e8f0fe' }}>
-          {toast}
+        <div className="fixed top-20 right-4 z-50 px-4 py-3 rounded-lg text-xs font-semibold shadow-2xl flex items-center gap-2"
+             style={{ background: '#1C1815', border: '1px solid #FF6B00', color: '#F5EBE1', boxShadow: '0 10px 25px rgba(255, 107, 0, 0.2)' }}>
+          <span className="text-[#FF6B00]">⚡</span>
+          <span>{toast}</span>
         </div>
       )}
 
-      {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      {/* Header Bar */}
+      <div className="flex flex-wrap items-center justify-between gap-3 pb-2 border-b" style={{ borderColor: '#382E26' }}>
         <div>
-          <h1 className="text-xl font-bold" style={{ color: '#e8f0fe' }}>💹 Trade Logs &amp; Orders</h1>
-          <p className="text-xs mt-0.5" style={{ color: '#8899b3' }}>
-            Log buy/sell for Stocks, Gold, Silver · Intraday &amp; Delivery · Powered by DhanHQ
+          <h1 className="text-xl font-black tracking-tight" style={{ color: '#F5EBE1' }}>
+            <span className="text-[#FF6B00]">PORTFOLIO</span> &amp; TRADE EXECUTION
+          </h1>
+          <p className="text-xs font-mono mt-0.5" style={{ color: '#A89F91' }}>
+            Multi-asset order management · Real-time P&amp;L · DhanHQ broker link
           </p>
         </div>
         <div className="flex gap-2">
-          <button onClick={loadAll} className="px-3 py-1.5 rounded-lg text-xs border transition-all hover:bg-white/5"
-                  style={{ borderColor: '#1a2d4a', color: '#8899b3' }}>↻ Refresh</button>
+          <button onClick={loadAll} className="px-3 py-1.5 rounded-lg text-xs font-medium border transition-all hover:border-[#FF6B00]"
+                  style={{ borderColor: '#382E26', color: '#A89F91', background: '#1C1815' }}>
+            ↻ Refresh
+          </button>
           <button
             onClick={() => { setShowForm(f => !f); setEditId(null); setForm(emptyForm); }}
-            className="px-4 py-1.5 rounded-lg text-sm font-semibold text-white"
-            style={{ background: 'linear-gradient(135deg,#00e676,#00b248)', color: '#000' }}>
+            className="px-4 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider text-black transition-all hover:opacity-90 shadow-md"
+            style={{ background: 'linear-gradient(135deg, #FF6B00, #FF8533)' }}>
             + Log Trade
           </button>
         </div>
       </div>
 
-      {/* ── Summary Cards ─────────────────────────────────────────────── */}
+      {/* ── Summary Stats ─────────────────────────────────────────────── */}
       {summary && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <SummaryCard label="Total Trades"   value={summary.total_trades}
-            sub={`${summary.buy_count} BUY · ${summary.sell_count} SELL`} />
+          <SummaryCard label="Total Trades" value={summary.total_trades}
+            sub={`${summary.buy_count} LONG · ${summary.sell_count} SHORT`} />
           <SummaryCard label="Capital Deployed" value={`₹${(summary.total_capital_deployed_inr || 0).toLocaleString('en-IN')}`} />
           <SummaryCard label="Realized P&L"
-            value={`${summary.realized_pnl_inr >= 0 ? '+' : ''}₹${(summary.realized_pnl_inr || 0).toLocaleString('en-IN')}`}
+            value={`${(summary.realized_pnl_inr || 0) >= 0 ? '+' : ''}₹${(summary.realized_pnl_inr || 0).toLocaleString('en-IN')}`}
             color={pnlColor} />
-          <SummaryCard label="Win Rate" value={`${summary.win_rate_pct?.toFixed(1) || 0}%`} />
+          <SummaryCard label="Win Rate" value={`${(summary.win_rate_pct || 0).toFixed(1)}%`} />
         </div>
       )}
 
       {/* ── Open Positions Monitor ────────────────────────────────────── */}
       {positions.length > 0 && (
         <div className="card overflow-hidden">
-          <div className="px-4 py-3 border-b flex items-center gap-2" style={{ borderColor: '#1a2d4a' }}>
-            <span className="w-2 h-2 rounded-full bg-green-400 pulse-dot"></span>
-            <h2 className="text-sm font-bold" style={{ color: '#e8f0fe' }}>Open Positions — Live Monitor</h2>
-            <span className="text-xs px-2 py-0.5 rounded-full badge-amber">
-              Intraday auto-exit before 3:15 PM IST
+          <div className="px-4 py-3 border-b flex items-center justify-between" style={{ borderColor: '#382E26' }}>
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-[#00E676] pulse-dot"></span>
+              <h2 className="text-xs font-bold uppercase tracking-wider" style={{ color: '#F5EBE1' }}>Live Position Monitor ({positions.length})</h2>
+            </div>
+            <span className="text-[11px] font-mono px-2 py-0.5 rounded badge-amber">
+              Intraday Auto-Exit at 3:15 PM IST
             </span>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead>
-                <tr style={{ color: '#8899b3', background: '#060b14' }}>
-                  {['Symbol','Type','Product','Entry','Current','Unrealized P&L','Signal','Action'].map(h => (
-                    <th key={h} className="px-3 py-2 text-left font-medium">{h}</th>
+                <tr style={{ color: '#A89F91', background: '#12100E' }}>
+                  {['Symbol','Type','Product','Entry Price','Current Price','Unrealized P&L','Risk Status','Square-Off'].map(h => (
+                    <th key={h} className="px-3 py-2.5 text-left font-semibold">{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -282,108 +296,109 @@ export default function TradeLoggingPage() {
 
       {/* ── Trade Form ────────────────────────────────────────────────── */}
       {showForm && (
-        <div className="card p-4 space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-sm font-bold" style={{ color: '#e8f0fe' }}>
-              {editId ? '✏️ Edit Trade' : '➕ New Trade Log'}
+        <div className="card p-4 space-y-4" style={{ borderColor: '#FF6B00' }}>
+          <div className="flex items-center justify-between border-b pb-3" style={{ borderColor: '#382E26' }}>
+            <h2 className="text-xs font-bold uppercase tracking-wider" style={{ color: '#F5EBE1' }}>
+              {editId ? '✏️ Modify Trade Record' : '➕ Log / Place New Trade'}
             </h2>
-            {!guardrails?.is_trading_enabled && (
-              <span className="text-xs px-2 py-1 rounded badge-red font-bold">
-                ⚠️ Live Trading OFF — Guardrails Active
-              </span>
-            )}
-            {guardrails?.paper_trading_mode && (
-              <span className="text-xs px-2 py-1 rounded badge-amber font-bold">📄 Paper Trading Mode</span>
-            )}
+            <div className="flex items-center gap-2">
+              {!guardrails?.is_trading_enabled && (
+                <span className="text-[10px] px-2 py-1 rounded badge-red font-bold">
+                  ⚠️ Live Trading OFF
+                </span>
+              )}
+              {guardrails?.paper_trading_mode && (
+                <span className="text-[10px] px-2 py-1 rounded badge-amber font-bold">📄 Paper Trading</span>
+              )}
+            </div>
           </div>
 
-          <form onSubmit={handleSubmit}>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-              {/* Trade Type toggle */}
-              <div className="col-span-2 sm:col-span-3 lg:col-span-4 flex gap-2">
-                {TRADE_TYPES.map(t => (
-                  <button type="button" key={t} onClick={() => handleFormChange('trade_type', t)}
-                    className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${
-                      form.trade_type === t
-                        ? t === 'BUY' ? 'badge-green' : 'badge-red'
-                        : 'opacity-40 badge-blue'
-                    }`}>
-                    {t === 'BUY' ? '↑ BUY' : '↓ SELL'}
-                  </button>
-                ))}
-              </div>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {/* Trade Type toggle */}
+            <div className="flex gap-2">
+              {TRADE_TYPES.map(t => (
+                <button type="button" key={t} onClick={() => handleFormChange('trade_type', t)}
+                  className={`flex-1 py-2 rounded text-xs font-black tracking-wider uppercase transition-all ${
+                    form.trade_type === t
+                      ? t === 'BUY' ? 'badge-green !py-2 text-sm' : 'badge-red !py-2 text-sm'
+                      : 'opacity-40 border border-[#382E26] text-[#A89F91]'
+                  }`}>
+                  {t === 'BUY' ? '↑ BUY / LONG' : '↓ SELL / SHORT'}
+                </button>
+              ))}
+            </div>
 
-              {/* Inputs */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
               {[
-                ['trade_date', 'Date', 'date'],
-                ['trade_time', 'Time (optional)', 'time'],
+                ['trade_date', 'Trade Date', 'date'],
+                ['trade_time', 'Trade Time', 'time'],
                 ['symbol',     'Symbol / Ticker', 'text'],
-                ['quantity',   'Quantity',         'number'],
-                ['price',      'Price (₹)',         'number'],
-                ['stop_loss',  'Stop Loss (₹)',     'number'],
-                ['target_price','Target (₹)',       'number'],
-                ['brokerage',  'Brokerage (₹)',     'number'],
+                ['quantity',   'Quantity (Shares)', 'number'],
+                ['price',      'Execution Price (₹)', 'number'],
+                ['stop_loss',  'Stop Loss (₹)', 'number'],
+                ['target_price','Target Price (₹)', 'number'],
+                ['brokerage',  'Brokerage & Tax (₹)', 'number'],
               ].map(([key, label, type]) => (
                 <div key={key} className="flex flex-col gap-1">
-                  <label className="text-xs" style={{ color: '#8899b3' }}>{label}</label>
+                  <label className="text-[11px] font-semibold" style={{ color: '#A89F91' }}>{label}</label>
                   <input
                     type={type} value={form[key]}
                     onChange={e => handleFormChange(key, e.target.value)}
                     placeholder={key === 'symbol' ? 'RELIANCE.NS' : ''}
-                    className="rounded-lg px-3 py-2 text-sm outline-none"
-                    style={{ background: '#060b14', border: '1px solid #1a2d4a', color: '#e8f0fe' }}
+                    className="rounded px-3 py-2 text-xs font-mono outline-none focus:border-[#FF6B00]"
+                    style={{ background: '#12100E', border: '1px solid #382E26', color: '#F5EBE1' }}
                   />
                 </div>
               ))}
 
               {/* Product Type */}
               <div className="flex flex-col gap-1">
-                <label className="text-xs" style={{ color: '#8899b3' }}>Product Type</label>
+                <label className="text-[11px] font-semibold" style={{ color: '#A89F91' }}>Product Type</label>
                 <select value={form.product_type} onChange={e => handleFormChange('product_type', e.target.value)}
-                  className="rounded-lg px-3 py-2 text-sm outline-none"
-                  style={{ background: '#060b14', border: '1px solid #1a2d4a', color: '#e8f0fe' }}>
+                  className="rounded px-3 py-2 text-xs font-mono outline-none"
+                  style={{ background: '#12100E', border: '1px solid #382E26', color: '#F5EBE1' }}>
                   {PROD_TYPES.map(p => <option key={p} value={p}>{p}</option>)}
                 </select>
               </div>
 
               {/* Asset Category */}
               <div className="flex flex-col gap-1">
-                <label className="text-xs" style={{ color: '#8899b3' }}>Asset Category</label>
+                <label className="text-[11px] font-semibold" style={{ color: '#A89F91' }}>Asset Category</label>
                 <select value={form.asset_category} onChange={e => handleFormChange('asset_category', e.target.value)}
-                  className="rounded-lg px-3 py-2 text-sm outline-none"
-                  style={{ background: '#060b14', border: '1px solid #1a2d4a', color: '#e8f0fe' }}>
+                  className="rounded px-3 py-2 text-xs font-mono outline-none"
+                  style={{ background: '#12100E', border: '1px solid #382E26', color: '#F5EBE1' }}>
                   {ASSET_CATS.map(a => <option key={a} value={a}>{a}</option>)}
                 </select>
               </div>
 
               {/* Notes */}
-              <div className="col-span-2 sm:col-span-3 lg:col-span-4 flex flex-col gap-1">
-                <label className="text-xs" style={{ color: '#8899b3' }}>Notes (optional)</label>
+              <div className="col-span-2 sm:col-span-2 lg:col-span-2 flex flex-col gap-1">
+                <label className="text-[11px] font-semibold" style={{ color: '#A89F91' }}>Strategy / Rationale</label>
                 <input value={form.notes} onChange={e => handleFormChange('notes', e.target.value)}
-                  placeholder="AI reasoning, entry rationale…"
-                  className="rounded-lg px-3 py-2 text-sm outline-none w-full"
-                  style={{ background: '#060b14', border: '1px solid #1a2d4a', color: '#e8f0fe' }}
+                  placeholder="e.g. LangGraph 15m breakout entry..."
+                  className="rounded px-3 py-2 text-xs outline-none w-full"
+                  style={{ background: '#12100E', border: '1px solid #382E26', color: '#F5EBE1' }}
                 />
               </div>
             </div>
 
             {/* Action Buttons */}
-            <div className="flex flex-wrap gap-3 mt-4">
+            <div className="flex flex-wrap gap-3 pt-2">
               <button type="submit"
-                className="px-5 py-2 rounded-lg text-sm font-bold text-white transition-all hover:opacity-90"
-                style={{ background: 'linear-gradient(135deg,#2979ff,#7c4dff)' }}>
-                {editId ? 'Update Trade' : '💾 Log Trade (Manual)'}
+                className="px-5 py-2 rounded text-xs font-bold uppercase tracking-wider text-white transition-all hover:opacity-90"
+                style={{ background: '#FF6B00' }}>
+                {editId ? 'Save Changes' : '💾 Log Trade Locally'}
               </button>
               {!editId && (
                 <button type="button" onClick={handlePlaceOrder}
-                  className="px-5 py-2 rounded-lg text-sm font-bold transition-all hover:opacity-90"
-                  style={{ background: 'linear-gradient(135deg,#00e676,#00b248)', color: '#000' }}>
-                  🚀 Execute via DhanHQ
+                  className="px-5 py-2 rounded text-xs font-bold uppercase tracking-wider transition-all hover:opacity-90"
+                  style={{ background: 'linear-gradient(135deg, #FFAA00, #FF6B00)', color: '#000000' }}>
+                  🚀 Place via Broker (DhanHQ)
                 </button>
               )}
               <button type="button" onClick={() => { setShowForm(false); setForm(emptyForm); setEditId(null); }}
-                className="px-4 py-2 rounded-lg text-sm border transition-all hover:bg-white/5"
-                style={{ borderColor: '#1a2d4a', color: '#8899b3' }}>
+                className="px-4 py-2 rounded text-xs border font-semibold transition-all hover:bg-white/5"
+                style={{ borderColor: '#382E26', color: '#A89F91' }}>
                 Cancel
               </button>
             </div>
@@ -399,11 +414,11 @@ export default function TradeLoggingPage() {
           ['symbol',     'Symbol',    'text'],
         ].map(([key, label, type]) => (
           <div key={key} className="flex flex-col gap-1">
-            <label className="text-xs" style={{ color: '#8899b3' }}>{label}</label>
+            <label className="text-[11px] font-semibold" style={{ color: '#A89F91' }}>{label}</label>
             <input type={type} value={filters[key]}
               onChange={e => setFilters(f => ({ ...f, [key]: e.target.value }))}
-              className="rounded-lg px-3 py-1.5 text-xs outline-none"
-              style={{ background: '#060b14', border: '1px solid #1a2d4a', color: '#e8f0fe' }}
+              className="rounded px-3 py-1.5 text-xs outline-none"
+              style={{ background: '#12100E', border: '1px solid #382E26', color: '#F5EBE1' }}
             />
           </div>
         ))}
@@ -413,41 +428,41 @@ export default function TradeLoggingPage() {
           ['asset_category',['','STOCK','GOLD','SILVER']],
         ].map(([key, opts]) => (
           <div key={key} className="flex flex-col gap-1">
-            <label className="text-xs capitalize" style={{ color: '#8899b3' }}>{key.replace('_',' ')}</label>
+            <label className="text-[11px] font-semibold capitalize" style={{ color: '#A89F91' }}>{key.replace('_',' ')}</label>
             <select value={filters[key]} onChange={e => setFilters(f => ({ ...f, [key]: e.target.value }))}
-              className="rounded-lg px-3 py-1.5 text-xs outline-none"
-              style={{ background: '#060b14', border: '1px solid #1a2d4a', color: '#e8f0fe' }}>
+              className="rounded px-3 py-1.5 text-xs outline-none"
+              style={{ background: '#12100E', border: '1px solid #382E26', color: '#F5EBE1' }}>
               {opts.map(o => <option key={o} value={o}>{o || 'All'}</option>)}
             </select>
           </div>
         ))}
-        <button onClick={loadAll} className="px-4 py-1.5 rounded-lg text-xs font-semibold text-white"
-                style={{ background: '#2979ff' }}>Filter</button>
+        <button onClick={loadAll} className="px-4 py-1.5 rounded text-xs font-bold uppercase tracking-wider text-black"
+                style={{ background: '#FF6B00' }}>Filter</button>
         <button onClick={() => { setFilters({ start_date:'',end_date:'',symbol:'',trade_type:'',product_type:'',asset_category:'' }); }}
-          className="px-3 py-1.5 rounded-lg text-xs border" style={{ borderColor: '#1a2d4a', color: '#8899b3' }}>Clear</button>
+          className="px-3 py-1.5 rounded text-xs border font-semibold" style={{ borderColor: '#382E26', color: '#A89F91' }}>Clear</button>
       </div>
 
       {/* ── Trade Log Table ───────────────────────────────────────────── */}
       <div className="card overflow-hidden">
-        <div className="px-4 py-3 border-b" style={{ borderColor: '#1a2d4a' }}>
-          <h2 className="text-sm font-bold" style={{ color: '#e8f0fe' }}>
-            Trade Execution History ({trades.length})
+        <div className="px-4 py-3 border-b flex items-center justify-between" style={{ borderColor: '#382E26' }}>
+          <h2 className="text-xs font-bold uppercase tracking-wider" style={{ color: '#F5EBE1' }}>
+            Execution Ledger ({trades.length})
           </h2>
         </div>
         {loading ? (
-          <div className="text-center py-12 text-sm" style={{ color: '#8899b3' }}>Loading trades…</div>
+          <div className="text-center py-12 text-xs font-mono" style={{ color: '#A89F91' }}>Loading trade records…</div>
         ) : trades.length === 0 ? (
           <div className="text-center py-10 space-y-1">
             <div className="text-3xl">📋</div>
-            <p className="text-sm" style={{ color: '#8899b3' }}>No trades logged yet. Click "+ Log Trade" to start.</p>
+            <p className="text-xs font-mono" style={{ color: '#A89F91' }}>No trades recorded. Click "+ Log Trade" to record an execution.</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead>
-                <tr style={{ color: '#8899b3', background: '#060b14' }}>
-                  {['Date','Time','Symbol','Type','Product','Asset','Qty','Price','Total','Stop','Target','Brokerage','P&L','Status','Actions'].map(h => (
-                    <th key={h} className="px-3 py-2 text-left font-medium whitespace-nowrap">{h}</th>
+                <tr style={{ color: '#A89F91', background: '#12100E' }}>
+                  {['Date','Time','Symbol','Type','Product','Asset','Qty','Price','Total Val','Stop','Target','Brokerage','P&L','Status','Actions'].map(h => (
+                    <th key={h} className="px-3 py-2.5 text-left font-semibold whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -455,40 +470,40 @@ export default function TradeLoggingPage() {
                 {trades.map(t => {
                   const pnl = t.realized_pnl || 0;
                   return (
-                    <tr key={t.id} className="table-row-hover border-b" style={{ borderColor: '#0d1f36' }}>
-                      <td className="px-3 py-2 whitespace-nowrap" style={{ color: '#8899b3' }}>{t.trade_date}</td>
-                      <td className="px-3 py-2 whitespace-nowrap" style={{ color: '#8899b3' }}>{t.trade_time || '—'}</td>
-                      <td className="px-3 py-2 font-semibold" style={{ color: '#e8f0fe' }}>{t.symbol}</td>
+                    <tr key={t.id} className="table-row-hover border-b" style={{ borderColor: 'rgba(56, 46, 38, 0.4)' }}>
+                      <td className="px-3 py-2 font-mono whitespace-nowrap" style={{ color: '#A89F91' }}>{t.trade_date}</td>
+                      <td className="px-3 py-2 font-mono whitespace-nowrap" style={{ color: '#A89F91' }}>{t.trade_time || '—'}</td>
+                      <td className="px-3 py-2 font-bold font-mono" style={{ color: '#F5EBE1' }}>{t.symbol}</td>
                       <td className="px-3 py-2">
-                        <span className={`px-2 py-0.5 rounded-full font-bold ${t.trade_type === 'BUY' ? 'badge-green' : 'badge-red'}`}>
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${t.trade_type === 'BUY' ? 'badge-green' : 'badge-red'}`}>
                           {t.trade_type}
                         </span>
                       </td>
-                      <td className="px-3 py-2 whitespace-nowrap" style={{ color: '#8899b3' }}>{t.product_type}</td>
-                      <td className="px-3 py-2 whitespace-nowrap" style={{ color: '#8899b3' }}>{t.asset_category}</td>
+                      <td className="px-3 py-2 font-mono whitespace-nowrap" style={{ color: '#A89F91' }}>{t.product_type}</td>
+                      <td className="px-3 py-2 font-mono whitespace-nowrap" style={{ color: '#A89F91' }}>{t.asset_category}</td>
                       <td className="px-3 py-2 font-mono">{t.quantity}</td>
                       <td className="px-3 py-2 font-mono">₹{t.price}</td>
                       <td className="px-3 py-2 font-mono">₹{t.total_value?.toLocaleString('en-IN')}</td>
-                      <td className="px-3 py-2 font-mono" style={{ color: '#ff1744' }}>{t.stop_loss ? `₹${t.stop_loss}` : '—'}</td>
-                      <td className="px-3 py-2 font-mono" style={{ color: '#00e676' }}>{t.target_price ? `₹${t.target_price}` : '—'}</td>
-                      <td className="px-3 py-2 font-mono" style={{ color: '#8899b3' }}>₹{t.brokerage}</td>
-                      <td className={`px-3 py-2 font-bold font-mono ${pnl > 0 ? 'text-green-400' : pnl < 0 ? 'text-red-400' : 'text-gray-500'}`}>
+                      <td className="px-3 py-2 font-mono" style={{ color: '#FF4D4D' }}>{t.stop_loss ? `₹${t.stop_loss}` : '—'}</td>
+                      <td className="px-3 py-2 font-mono" style={{ color: '#00E676' }}>{t.target_price ? `₹${t.target_price}` : '—'}</td>
+                      <td className="px-3 py-2 font-mono" style={{ color: '#A89F91' }}>₹{t.brokerage}</td>
+                      <td className={`px-3 py-2 font-bold font-mono ${pnl > 0 ? 'text-[#00E676]' : pnl < 0 ? 'text-[#FF4D4D]' : 'text-gray-400'}`}>
                         {pnl > 0 ? '+' : ''}₹{pnl}
                       </td>
                       <td className="px-3 py-2">
-                        <span className={`px-2 py-0.5 rounded text-xs ${
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
                           t.status === 'SQUARED_OFF' ? 'badge-green' :
                           t.status === 'OPEN'        ? 'badge-amber' :
-                          t.status === 'CANCELLED'   ? 'badge-red'   : 'badge-blue'
+                          t.status === 'CANCELLED'   ? 'badge-red'   : 'badge-orange'
                         }`}>{t.status}</span>
                       </td>
                       <td className="px-3 py-2 flex gap-1">
                         <button onClick={() => handleEdit(t)}
-                          className="px-2 py-1 rounded text-xs border hover:bg-white/5 transition-all"
-                          style={{ borderColor: '#1a2d4a', color: '#8899b3' }}>Edit</button>
+                          className="px-2 py-1 rounded text-xs border hover:border-[#FF6B00] transition-all"
+                          style={{ borderColor: '#382E26', color: '#A89F91' }}>Edit</button>
                         <button onClick={() => handleDelete(t.id)}
                           className="px-2 py-1 rounded text-xs hover:opacity-80"
-                          style={{ background: 'rgba(255,23,68,0.15)', color: '#ff1744' }}>Del</button>
+                          style={{ background: 'rgba(255, 77, 77, 0.15)', color: '#FF4D4D' }}>Del</button>
                       </td>
                     </tr>
                   );

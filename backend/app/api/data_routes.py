@@ -1,10 +1,12 @@
-"""
-Data Routes for StockAI.
-Wires endpoints to live market data and technical services:
-- GET /data/global-macro: returns Indian macro indicators & sentiment
-- GET /data/interval-data/{ticker}: returns dynamic candles & calculated indicators
-- POST /data/deep-analysis: performs dynamic AI stock analysis for INTRADAY or DELIVERY
-- GET /data/position-monitor: live monitoring of open positions with current prices
+﻿"""
+Market Data & Quantitative Analytics API Router.
+Wires live market data, multi-step candlestick charts, and deep analysis.
+
+Endpoints:
+- GET  /data/global-macro: Returns global/domestic macroeconomic news events and sentiment scores.
+- GET  /data/interval-data/{ticker}: Dynamic interval candles with technical indicators (RSI, MACD, VWAP).
+- POST /data/deep-analysis: Generates deep technical and AI evaluation for a single ticker.
+- GET  /data/position-monitor: Real-time risk and P&L monitor with automated 15:15 IST square-off warnings.
 """
 
 import datetime
@@ -27,13 +29,53 @@ router = APIRouter(prefix="/data", tags=["data"])
 
 @router.get("/global-macro")
 async def global_macro():
-    """Returns macro events and sentiment scores impacting Indian market."""
+    """
+    Returns global macro events and sentiment scores impacting the Indian market.
+
+    - **Purpose**: Global and domestic macro news feed with automated sentiment & impact scoring.
+    - **Method**: GET
+    - **Payload**: None
+    - **Response**:
+      ```json
+      [
+        {
+          "title": "RBI Keeps Repo Rate Steady at 6.50%",
+          "source": "Macro Economic Desk",
+          "region": "India",
+          "sentiment": "Positive",
+          "impact_score": 7.5,
+          "summary": "...",
+          "published_at": "2026-09-09 10:00:00"
+        }
+      ]
+      ```
+    """
     return get_global_macro_news_feed()
 
 
 @router.get("/interval-data/{ticker}")
 async def get_interval_data(ticker: str, timeframe: str = "15m"):
-    """Fetches dynamic interval stock market data and technical calculations."""
+    """
+    Fetches dynamic interval stock market data and technical indicator calculations.
+
+    - **Purpose**: Feeds interactive candlestick charts with computed technical overlays.
+    - **Method**: GET
+    - **Path Params**: `ticker` (e.g. `RELIANCE.NS`, `TCS`)
+    - **Query Params**: `timeframe` (default `15m`)
+    - **Response**:
+      ```json
+      {
+        "ticker": "RELIANCE.NS",
+        "timeframe": "15m",
+        "current_price": 1294.9,
+        "rsi_14": 58.4,
+        "macd_signal": "BULLISH_CROSSOVER",
+        "vwap": 1289.2,
+        "trend": "Bullish",
+        "candles": [{"step": 1, "open": 1280.0, "high": 1285.0, "low": 1278.0, "close": 1284.5, "volume": 150000, "datetime": "..."}]
+      }
+      ```
+    """
     canonical = resolve_ticker_symbol(ticker)
     data = await fetch_stock_market_data(canonical, period="5d", interval="15m")
     candles = data.get("intraday_candles") or data.get("history", [])
@@ -76,7 +118,38 @@ async def perform_deep_analysis(
     date_str: Optional[str] = None,
     trade_mode: Optional[str] = "INTRADAY",
 ):
-    """Performs dynamic deep AI stock analysis evaluating technicals, macro context, and bias."""
+    """
+    Performs dynamic deep AI stock analysis evaluating technicals, macro context, and bias.
+
+    - **Purpose**: Generates instant multi-point scorecards with target/stop-loss recommendations.
+    - **Method**: POST
+    - **Query Params**:
+      - `ticker` (str, required): e.g. `TCS.NS`
+      - `date_str` (str, optional): `YYYY-MM-DD`
+      - `trade_mode` (str, optional): `INTRADAY` or `DELIVERY`
+    - **Response**:
+      ```json
+      {
+        "ticker": "TCS.NS",
+        "symbol": "TCS",
+        "name": "Tata Consultancy Services",
+        "analysis_date": "2026-09-10",
+        "trade_mode": "INTRADAY",
+        "initial_price": 2255.5,
+        "target_price": 2295.0,
+        "stop_loss": 2230.0,
+        "overall_sentiment": "Bullish",
+        "intraday_bias": "Strong Buy",
+        "recommendation": "BUY",
+        "technical_score": 82.0,
+        "macro_score": 78.0,
+        "ai_reasoning": "...",
+        "selling_point": "Strong support bounce at S1 pivot.",
+        "key_signals": ["RSI Oversold Bounce", "MACD Histogram Positive"],
+        "risks": ["Broader IT sector consolidation"]
+      }
+      ```
+    """
     cur_date = date_str or datetime.datetime.now().strftime("%Y-%m-%d")
     canonical = resolve_ticker_symbol(ticker)
     mode = (trade_mode or "INTRADAY").upper()
@@ -122,7 +195,36 @@ async def perform_deep_analysis(
 
 @router.get("/position-monitor")
 async def monitor_open_positions():
-    """Active monitoring API for currently open positions with live quotes."""
+    """
+    Active monitoring API for currently open positions with live quotes and auto-exit warnings.
+
+    - **Purpose**: Real-time risk and P&L tracker; flags 15:15 IST intraday auto-squareoff.
+    - **Method**: GET
+    - **Payload**: None
+    - **Response**:
+      ```json
+      {
+        "market_status": "MARKET_OPEN",
+        "open_positions_count": 1,
+        "positions": [
+          {
+            "trade_id": 5,
+            "symbol": "TCS.NS",
+            "trade_type": "BUY",
+            "product_type": "INTRADAY",
+            "entry_price": 2240.0,
+            "current_price": 2255.5,
+            "quantity": 25,
+            "unrealized_pnl": 387.5,
+            "stop_loss": 2220.0,
+            "target_price": 2280.0,
+            "needs_auto_squareoff": false,
+            "recommendation": "HOLD"
+          }
+        ]
+      }
+      ```
+    """
     market_info = get_indian_market_status()
     async with AsyncSessionLocal() as session:
         result = await session.execute(select(StockTradeLog).filter_by(status="OPEN"))

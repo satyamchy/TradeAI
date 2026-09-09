@@ -1,3 +1,15 @@
+﻿"""
+Trade Execution Logs & Analytics API Router.
+CRUD operations on recorded trades and portfolio performance analytics.
+
+Endpoints:
+- GET    /trades/: List all trades with filtering (symbol, product, asset category, date range).
+- POST   /trades/: Manually record a completed trade.
+- PUT    /trades/{trade_id}: Update an existing trade entry.
+- DELETE /trades/{trade_id}: Delete a trade record.
+- GET    /trades/summary: Aggregated P&L metrics, win rate, and capital deployed.
+"""
+
 import datetime
 from typing import Optional
 from fastapi import APIRouter, Query, HTTPException, Body
@@ -11,12 +23,30 @@ router = APIRouter(prefix="/trades", tags=["trades"])
 
 
 class TradeCreateRequest(BaseModel):
-    trade_date: str               # YYYY-MM-DD
+    """
+    Manual Trade Creation Payload.
+    
+    Fields:
+    - trade_date (str): 'YYYY-MM-DD'
+    - trade_time (str, optional): 'HH:MM:SS'
+    - symbol (str): e.g. 'RELIANCE.NS'
+    - trade_type (str): 'BUY' or 'SELL'
+    - product_type (str, optional): 'INTRADAY' or 'DELIVERY'
+    - asset_category (str, optional): 'STOCK', 'GOLD', or 'SILVER'
+    - quantity (int): Units
+    - price (float): Execution price (₹)
+    - stop_loss (float, optional): Stop loss price
+    - target_price (float, optional): Target price
+    - brokerage (float, optional): Estimated charges
+    - realized_pnl (float, optional): Closed P&L if already squared off
+    - notes (str, optional): Rationale
+    """
+    trade_date: str
     trade_time: Optional[str] = None
     symbol: str
-    trade_type: str               # BUY / SELL
-    product_type: Optional[str] = "INTRADAY"   # INTRADAY / DELIVERY
-    asset_category: Optional[str] = "STOCK"    # STOCK / GOLD / SILVER
+    trade_type: str
+    product_type: Optional[str] = "INTRADAY"
+    asset_category: Optional[str] = "STOCK"
     quantity: int
     price: float
     stop_loss: Optional[float] = None
@@ -27,6 +57,9 @@ class TradeCreateRequest(BaseModel):
 
 
 class TradeUpdateRequest(BaseModel):
+    """
+    Trade Update Payload.
+    """
     price: Optional[float] = None
     quantity: Optional[int] = None
     stop_loss: Optional[float] = None
@@ -46,7 +79,34 @@ async def list_trades(
     asset_category: Optional[str] = None,
     limit: int = 100,
 ):
-    """List all trade logs with optional date range, symbol, type filters."""
+    """
+    List all trade logs with optional date range, symbol, and type filters.
+
+    - **Purpose**: Retrieves filtered trade logs for auditing and journaling.
+    - **Method**: GET
+    - **Query Params**: `start_date`, `end_date`, `symbol`, `trade_type`, `product_type`, `asset_category`, `limit`.
+    - **Response**:
+      ```json
+      {
+        "count": 1,
+        "trades": [
+          {
+            "id": 1,
+            "trade_date": "2026-09-10",
+            "symbol": "RELIANCE.NS",
+            "trade_type": "BUY",
+            "product_type": "INTRADAY",
+            "asset_category": "STOCK",
+            "quantity": 10,
+            "price": 1290.0,
+            "total_value": 12900.0,
+            "realized_pnl": 0.0,
+            "status": "OPEN"
+          }
+        ]
+      }
+      ```
+    """
     async with AsyncSessionLocal() as session:
         query = select(StockTradeLog).order_by(StockTradeLog.trade_date.desc(), StockTradeLog.created_at.desc())
         if start_date:
@@ -92,7 +152,14 @@ async def list_trades(
 
 @router.post("/")
 async def create_trade(trade: TradeCreateRequest):
-    """Manually log a buy or sell trade for any date."""
+    """
+    Manually log a buy or sell trade for any date.
+
+    - **Purpose**: Creates an offline / manual trade journal entry.
+    - **Method**: POST
+    - **Payload**: `TradeCreateRequest` model.
+    - **Response**: `{"message": "Trade logged successfully.", "id": 15}`
+    """
     async with AsyncSessionLocal() as session:
         t = StockTradeLog(
             trade_date=trade.trade_date,
@@ -118,7 +185,14 @@ async def create_trade(trade: TradeCreateRequest):
 
 @router.put("/{trade_id}")
 async def update_trade(trade_id: int, updates: TradeUpdateRequest):
-    """Update an existing trade log entry."""
+    """
+    Update an existing trade log entry.
+
+    - **Purpose**: Modifies price, quantity, stop-loss, status, or realized P&L.
+    - **Method**: PUT
+    - **Path Params**: `trade_id` (int)
+    - **Payload**: `TradeUpdateRequest` model.
+    """
     async with AsyncSessionLocal() as session:
         t = await session.get(StockTradeLog, trade_id)
         if not t:
@@ -143,7 +217,13 @@ async def update_trade(trade_id: int, updates: TradeUpdateRequest):
 
 @router.delete("/{trade_id}")
 async def delete_trade(trade_id: int):
-    """Delete a trade log entry."""
+    """
+    Delete a trade log entry.
+
+    - **Purpose**: Removes a recorded trade from the database.
+    - **Method**: DELETE
+    - **Path Params**: `trade_id` (int)
+    """
     async with AsyncSessionLocal() as session:
         t = await session.get(StockTradeLog, trade_id)
         if not t:
@@ -155,7 +235,23 @@ async def delete_trade(trade_id: int):
 
 @router.get("/summary")
 async def trade_summary():
-    """P&L summary: total capital deployed, realized P&L, win rate, trade counts."""
+    """
+    P&L summary: total capital deployed, realized P&L, win rate, and trade counts.
+
+    - **Purpose**: Aggregates top-line statistics for dashboard scorecards.
+    - **Method**: GET
+    - **Response**:
+      ```json
+      {
+        "total_trades": 18,
+        "buy_count": 12,
+        "sell_count": 6,
+        "total_capital_deployed_inr": 245000.0,
+        "realized_pnl_inr": 14250.0,
+        "win_rate_pct": 72.2
+      }
+      ```
+    """
     async with AsyncSessionLocal() as session:
         result = await session.execute(select(StockTradeLog))
         all_trades = result.scalars().all()

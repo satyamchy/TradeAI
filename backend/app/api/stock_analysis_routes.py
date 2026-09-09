@@ -1,14 +1,9 @@
-"""
-Stock Analysis API Router for Phase 1.
-Implements:
-- POST /api/v1/stocks/analyze
-Supports:
-- mode: "selected" (single, multiple, or natural language name) | "top_movers"
-- analysis_type: "intraday" | "delivery"
-- date: YYYY-MM-DD
-- top_n: integer for top_movers
+﻿"""
+Stock Market Analysis API Router.
+Handles single, multi-symbol, and top-mover equity evaluations with automatic database snapshot logging.
 
-Logs every analysis response for each stock to the database.
+Endpoints:
+- POST /stocks/analyze: Batch/single stock analysis report generation.
 """
 
 import datetime
@@ -27,6 +22,16 @@ router = APIRouter(prefix="/stocks", tags=["stocks"])
 
 
 class StockAnalyzeRequest(BaseModel):
+    """
+    Stock Analysis Request Payload.
+    
+    Fields:
+    - mode (str): 'selected' (analyze specific tickers) or 'top_movers' (analyze top intraday gainers).
+    - symbols (List[str], optional): List of tickers or company names (e.g. ['RELIANCE.NS', 'TCS']).
+    - analysis_type (str): 'intraday' or 'delivery' (default 'intraday').
+    - date (str, optional): 'YYYY-MM-DD' analysis reference date.
+    - top_n (int, optional): Number of top movers to fetch if mode='top_movers' (default 5).
+    """
     mode: str = Field(default="selected", description="selected | top_movers")
     symbols: Optional[List[str]] = Field(default=None, description="List of tickers or stock names, e.g. ['TCS.NS', 'Analyze Reliance']")
     analysis_type: str = Field(default="intraday", description="intraday | delivery")
@@ -35,6 +40,23 @@ class StockAnalyzeRequest(BaseModel):
 
 
 class SingleStockAnalysisResponse(BaseModel):
+    """
+    Stock Analysis Result Item.
+    
+    Fields:
+    - symbol (str): Resolved ticker symbol.
+    - analysis_type (str): 'intraday' or 'delivery'.
+    - market_data (Dict): Raw quote, fundamentals, and summary.
+    - technical_analysis (Dict): Quantitative RSI, MACD, Pivot Points, Moving Averages.
+    - recommendation (str): 'BUY', 'HOLD', or 'AVOID'.
+    - confidence (float): Score 0.0 - 1.0.
+    - risk_level (str): 'LOW', 'MEDIUM', or 'HIGH'.
+    - summary (str): Natural language evaluation summary.
+    - key_signals (List[str]): Bullet points of technical indicators triggered.
+    - risks (List[str]): Market/technical risk factors.
+    - selling_point (str): Primary execution rationale.
+    - disclaimer (str): Mandatory compliance disclaimer.
+    """
     symbol: str
     analysis_type: str
     market_data: Dict[str, Any]
@@ -89,10 +111,19 @@ async def _log_analysis_to_db(result: Dict[str, Any], date_str: str) -> Optional
 @router.post("/analyze", response_model=List[SingleStockAnalysisResponse])
 async def analyze_stocks(req: StockAnalyzeRequest):
     """
-    Main Phase 1 Stock Market Analysis Endpoint.
-    Handles 'selected' stocks or 'top_movers'.
-    Returns structured market data, technical indicators, and AI recommendations.
-    Logs every analyzed stock to the database.
+    Main Stock Market Analysis & Screener Endpoint.
+
+    - **Purpose**: Evaluates market data, technical indicators, and AI recommendations for single or multi-symbol requests.
+    - **Method**: POST
+    - **Payload**:
+      ```json
+      {
+        "mode": "selected",
+        "symbols": ["TCS.NS", "RELIANCE.NS"],
+        "analysis_type": "intraday"
+      }
+      ```
+    - **Response**: List of `SingleStockAnalysisResponse` models.
     """
     mode = req.mode.lower().strip()
     analysis_type = req.analysis_type.lower().strip()
@@ -109,7 +140,6 @@ async def analyze_stocks(req: StockAnalyzeRequest):
         if not tickers_to_analyze:
             tickers_to_analyze = ["RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "INFY.NS", "SBIN.NS"][:top_n]
     else:
-        # mode == "selected"
         raw_symbols = req.symbols or []
         if not raw_symbols:
             raise HTTPException(
@@ -125,13 +155,8 @@ async def analyze_stocks(req: StockAnalyzeRequest):
 
     for ticker in tickers_to_analyze:
         try:
-            # 1. Fetch raw market data from isolated service
             market_data = await fetch_stock_market_data(ticker)
-
-            # 2. Compute deterministic technical indicators
             tech_analysis = run_technical_analysis(market_data, analysis_type=analysis_type)
-
-            # 3. Generate grounded AI interpretation
             ai_eval = await generate_ai_stock_analysis(
                 symbol=ticker,
                 analysis_type=analysis_type,
@@ -161,12 +186,9 @@ async def analyze_stocks(req: StockAnalyzeRequest):
                 "disclaimer": "AI-generated financial decision support only. Not financial or investment advice.",
             }
 
-            # 4. Log to DB
             await _log_analysis_to_db(stock_result, cur_date)
-
             results.append(SingleStockAnalysisResponse(**stock_result))
-        except Exception as e:
-            # Continue analyzing others if one ticker fails
+        except Exception:
             continue
 
     if not results:

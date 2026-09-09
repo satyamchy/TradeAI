@@ -1,3 +1,13 @@
+﻿"""
+Historical Analysis & Prediction Snapshots API Router.
+Provides queries for recorded AI stock analysis predictions and manual snapshot creation.
+
+Endpoints:
+- GET  /analysis/today: Returns today's recorded analysis snapshots.
+- GET  /analysis/prediction: Fetch AI predictions by specific date and ticker.
+- POST /analysis/log: Save a custom analysis prediction snapshot.
+"""
+
 import datetime
 from typing import Optional
 from fastapi import APIRouter, Query, HTTPException
@@ -10,7 +20,39 @@ router = APIRouter(prefix="/analysis", tags=["analysis"])
 
 @router.get("/today")
 async def get_todays_analysis(ticker: Optional[str] = None):
-    """Returns today's analysis snapshots for Indian stocks from the DB."""
+    """
+    Returns today's recorded analysis snapshots for Indian stocks.
+
+    - **Purpose**: Fast retrieval of previously calculated daily stock analyses.
+    - **Method**: GET
+    - **Query Params**: `ticker` (str, optional)
+    - **Response**:
+      ```json
+      {
+        "date": "2026-09-10",
+        "count": 1,
+        "results": [
+          {
+            "id": 1,
+            "ticker": "RELIANCE.NS",
+            "symbol": "RELIANCE",
+            "name": "Reliance Industries",
+            "analysis_date": "2026-09-10",
+            "initial_price": 1294.9,
+            "target_price": 1335.0,
+            "stop_loss": 1270.0,
+            "overall_sentiment": "Bullish",
+            "intraday_bias": "Bullish",
+            "recommendation": "BUY",
+            "technical_score": 75.0,
+            "macro_score": 75.0,
+            "ai_reasoning": "...",
+            "created_at": "2026-09-10T01:00:00"
+          }
+        ]
+      }
+      ```
+    """
     today_str = datetime.datetime.now().strftime("%Y-%m-%d")
     async with AsyncSessionLocal() as session:
         query = select(StockAnalysisSnapshot).where(
@@ -48,7 +90,16 @@ async def get_prediction_by_date(
     date: str = Query(..., description="Date in YYYY-MM-DD format"),
     ticker: Optional[str] = None
 ):
-    """Fetch AI prediction and analysis snapshots for any particular date."""
+    """
+    Fetch AI prediction snapshots for any historical date.
+
+    - **Purpose**: Verifies accuracy by comparing past predictions against actual closing performance.
+    - **Method**: GET
+    - **Query Params**:
+      - `date` (str, required): `YYYY-MM-DD`
+      - `ticker` (str, optional): `TCS` or `RELIANCE.NS`
+    - **Response**: Same format as `/analysis/today`.
+    """
     async with AsyncSessionLocal() as session:
         query = select(StockAnalysisSnapshot).where(
             StockAnalysisSnapshot.analysis_date == date
@@ -82,7 +133,33 @@ async def get_prediction_by_date(
 
 @router.post("/log")
 async def log_analysis_snapshot(payload: dict):
-    """Save/Log an AI prediction snapshot for a specific date and ticker."""
+    """
+    Saves a custom AI prediction snapshot for a specific ticker and date.
+
+    - **Purpose**: Persists external or client-generated analysis snapshots.
+    - **Method**: POST
+    - **Payload**:
+      ```json
+      {
+        "ticker": "INFY.NS",
+        "symbol": "INFY",
+        "analysis_date": "2026-09-10",
+        "initial_price": 1850.0,
+        "target_price": 1920.0,
+        "stop_loss": 1810.0,
+        "recommendation": "BUY",
+        "technical_score": 80.0
+      }
+      ```
+    - **Response**:
+      ```json
+      {
+        "message": "Analysis snapshot saved.",
+        "id": 12,
+        "analysis_date": "2026-09-10"
+      }
+      ```
+    """
     required = ["ticker", "symbol", "analysis_date", "initial_price"]
     for f in required:
         if f not in payload:

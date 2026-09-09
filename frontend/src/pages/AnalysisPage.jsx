@@ -1,36 +1,39 @@
-import { useState, useEffect, useCallback } from 'react';
+﻿import { useState, useEffect, useCallback } from 'react';
 import {
   fetchTodaysAnalysis,
   fetchPredictionByDate,
   fetchGlobalMacro,
   runDeepAnalysis,
   logAnalysisSnapshot,
+  analyzeStocks,
+  fetchPerformanceHistory,
 } from '../api/stockApi';
 
-const TABS = ['Today\'s Analysis', 'Prediction by Date'];
+const TABS = ['⚡ Top Movers Screener', '📊 Today\'s Analysis', '🗓️ Prediction Archive', '🎯 Accuracy Tracker'];
 const SENTIMENT_COLOR = { Bullish: 'badge-green', Bearish: 'badge-red', Neutral: 'badge-amber' };
 const REC_COLOR       = { BUY: 'badge-green',    SELL: 'badge-red',    HOLD: 'badge-amber'    };
 
-// ── Reusable Analysis Card ────────────────────────────────────────────────────
 function AnalysisCard({ item }) {
   const [expanded, setExpanded] = useState(false);
   return (
-    <div className="card p-4 transition-all hover:border-blue-500/30 cursor-pointer" onClick={() => setExpanded(e => !e)}>
+    <div
+      className="card p-4 transition-all hover:border-orange-500/40 cursor-pointer"
+      style={{ background: '#1c1815' }}
+      onClick={() => setExpanded(e => !e)}
+    >
       <div className="flex flex-wrap items-start justify-between gap-2">
-        {/* Symbol + Date */}
         <div>
           <div className="flex items-center gap-2">
-            <span className="font-bold text-base" style={{ color: '#e8f0fe' }}>{item.symbol}</span>
-            <span className="text-xs px-2 py-0.5 rounded" style={{ background: '#1a2d4a', color: '#8899b3' }}>
-              {item.analysis_date}
+            <span className="font-bold text-base" style={{ color: '#f5ebe1' }}>{item.symbol || item.ticker}</span>
+            <span className="text-[11px] px-2 py-0.5 rounded font-mono" style={{ background: '#12100e', color: '#ffaa00' }}>
+              {item.analysis_date || item.trade_mode || 'ANALYSIS'}
             </span>
           </div>
-          <div className="text-xs mt-0.5" style={{ color: '#8899b3' }}>{item.name || item.ticker}</div>
+          <div className="text-xs mt-0.5" style={{ color: '#a89b8c' }}>{item.name || item.ticker}</div>
         </div>
 
-        {/* Badges */}
-        <div className="flex flex-wrap items-center gap-2">
-          <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${REC_COLOR[item.recommendation] || 'badge-amber'}`}>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${REC_COLOR[item.recommendation] || 'badge-amber'}`}>
             {item.recommendation}
           </span>
           <span className={`px-2 py-0.5 rounded-full text-xs ${SENTIMENT_COLOR[item.overall_sentiment] || 'badge-amber'}`}>
@@ -39,120 +42,129 @@ function AnalysisCard({ item }) {
         </div>
       </div>
 
-      {/* Price strip */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-3">
         {[
-          ['Entry Price',  item.initial_price ? `₹${item.initial_price.toLocaleString('en-IN')}` : '—'],
-          ['Target',       item.target_price  ? `₹${item.target_price.toLocaleString('en-IN')}`  : '—'],
-          ['Stop Loss',    item.stop_loss     ? `₹${item.stop_loss.toLocaleString('en-IN')}`     : '—'],
-          ['Tech Score',   item.technical_score != null ? `${item.technical_score}/100` : '—'],
+          ['Entry Price', item.initial_price ? `₹${item.initial_price.toLocaleString('en-IN')}` : '—'],
+          ['Target',      item.target_price  ? `₹${item.target_price.toLocaleString('en-IN')}`  : '—'],
+          ['Stop Loss',   item.stop_loss     ? `₹${item.stop_loss.toLocaleString('en-IN')}`     : '—'],
+          ['Tech Score',  item.technical_score != null ? `${item.technical_score}/100` : '—'],
         ].map(([label, val]) => (
-          <div key={label} className="rounded-lg p-2 text-center" style={{ background: '#060b14' }}>
-            <div className="text-xs" style={{ color: '#8899b3' }}>{label}</div>
-            <div className="font-semibold text-sm" style={{ color: '#e8f0fe' }}>{val}</div>
+          <div key={label} className="rounded-lg p-2 text-center" style={{ background: '#12100e', border: '1px solid #2e251e' }}>
+            <div className="text-[10px]" style={{ color: '#a89b8c' }}>{label}</div>
+            <div className="font-semibold text-xs" style={{ color: '#f5ebe1' }}>{val}</div>
           </div>
         ))}
       </div>
 
-      {/* AI Reasoning (expandable) */}
-      {expanded && item.ai_reasoning && (
-        <div className="mt-3 rounded-lg p-3 text-xs" style={{ background: '#060b14', color: '#8899b3', lineHeight: '1.6' }}>
-          <div className="text-xs font-semibold mb-1" style={{ color: '#2979ff' }}>🤖 AI Reasoning</div>
-          {item.ai_reasoning}
+      {expanded && (item.ai_reasoning || item.summary) && (
+        <div className="mt-3 rounded-lg p-3 text-xs border" style={{ background: '#12100e', borderColor: '#382e26', color: '#a89b8c', lineHeight: '1.6' }}>
+          <div className="text-xs font-bold mb-1 flex items-center gap-1" style={{ color: '#ff8533' }}>
+            🤖 AI Rationale &amp; Key Signals
+          </div>
+          <p>{item.ai_reasoning || item.summary}</p>
+          {item.key_signals && (
+            <div className="mt-2 flex flex-wrap gap-1">
+              {item.key_signals.map((sig, sIdx) => (
+                <span key={sIdx} className="px-2 py-0.5 rounded text-[10px] badge-beige">{sig}</span>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>
   );
 }
 
-// ── Macro News Card ───────────────────────────────────────────────────────────
-function MacroCard({ item }) {
-  const color = item.sentiment === 'Positive' ? '#00e676' : item.sentiment === 'Negative' ? '#ff1744' : '#ffc107';
-  const bg    = item.sentiment === 'Positive' ? 'rgba(0,230,118,0.08)' : item.sentiment === 'Negative' ? 'rgba(255,23,68,0.08)' : 'rgba(255,193,7,0.08)';
-  return (
-    <div className="rounded-lg p-3 border" style={{ background: bg, borderColor: `${color}33` }}>
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex-1">
-          <div className="text-xs font-semibold leading-snug" style={{ color: '#e8f0fe' }}>{item.title}</div>
-          <div className="text-xs mt-1" style={{ color: '#8899b3' }}>{item.summary}</div>
-        </div>
-        <div className="flex flex-col items-end gap-1 shrink-0">
-          <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{ color, background: bg, border: `1px solid ${color}44` }}>
-            {item.sentiment}
-          </span>
-          <span className="text-xs font-mono" style={{ color }}>
-            Impact: {item.impact_score > 0 ? '+' : ''}{item.impact_score}
-          </span>
-        </div>
-      </div>
-      <div className="text-xs mt-1 flex gap-2" style={{ color: '#8899b3' }}>
-        <span>{item.region}</span> · <span>{item.published_at}</span>
-      </div>
-    </div>
-  );
-}
-
-// ── Main Page ─────────────────────────────────────────────────────────────────
 export default function AnalysisPage() {
-  const [tab,          setTab]          = useState(0);
-  const [todayData,    setTodayData]    = useState([]);
-  const [macroNews,    setMacroNews]    = useState([]);
-  const [predDate,     setPredDate]     = useState(new Date().toISOString().slice(0, 10));
-  const [predTicker,   setPredTicker]   = useState('');
-  const [predData,     setPredData]     = useState([]);
-  const [analyseTicker,setAnalyseTicker]= useState('');
-  const [loading,      setLoading]      = useState(false);
-  const [analysing,    setAnalysing]    = useState(false);
-  const [toast,        setToast]        = useState('');
+  const [tab, setTab] = useState(0);
+  const [todayData, setTodayData] = useState([]);
+  const [macroNews, setMacroNews] = useState([]);
+  const [topMovers, setTopMovers] = useState([]);
+  const [predDate, setPredDate] = useState(new Date().toISOString().slice(0, 10));
+  const [predTicker, setPredTicker] = useState('');
+  const [predData, setPredData] = useState([]);
+  const [perfTicker, setPerfTicker] = useState('RELIANCE.NS');
+  const [perfResult, setPerfResult] = useState(null);
+  const [analyseTicker, setAnalyseTicker] = useState('');
+  const [tradeMode, setTradeMode] = useState('INTRADAY');
+  const [loading, setLoading] = useState(false);
+  const [analysing, setAnalysing] = useState(false);
+  const [toast, setToast] = useState('');
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(''), 3000); };
 
-  // Load today's data
   const loadToday = useCallback(async () => {
     setLoading(true);
     try {
       const [t, m] = await Promise.all([fetchTodaysAnalysis(), fetchGlobalMacro()]);
       setTodayData(t.results || []);
-      setMacroNews(m);
+      setMacroNews(m || []);
     } catch (e) {
-      showToast('Failed to load today\'s data');
+      showToast('Failed to load analysis snapshot data.');
     }
     setLoading(false);
   }, []);
 
-  useEffect(() => { loadToday(); }, [loadToday]);
+  const loadTopMovers = async () => {
+    setLoading(true);
+    try {
+      const res = await analyzeStocks({ mode: 'top_movers', top_n: 6, analysis_type: tradeMode.toLowerCase() });
+      setTopMovers(res || []);
+    } catch (err) {
+      showToast('Failed to scan top movers.');
+    }
+    setLoading(false);
+  };
 
-  // Load prediction by date
+  useEffect(() => {
+    if (tab === 0) loadTopMovers();
+    if (tab === 1) loadToday();
+  }, [tab, loadToday]);
+
   const loadPrediction = async () => {
     if (!predDate) return;
     setLoading(true);
     try {
       const res = await fetchPredictionByDate(predDate, predTicker || undefined);
       setPredData(res.results || []);
-    } catch (_) { showToast('Failed to fetch predictions'); }
+    } catch (_) {
+      showToast('Failed to fetch predictions.');
+    }
     setLoading(false);
   };
 
-  // Run deep AI analysis and log it
+  const loadPerformance = async () => {
+    if (!perfTicker.trim()) return;
+    setLoading(true);
+    try {
+      const res = await fetchPerformanceHistory(perfTicker.trim());
+      setPerfResult(res);
+    } catch (_) {
+      showToast('No history found for ticker.');
+    }
+    setLoading(false);
+  };
+
   const runAnalysis = async () => {
     if (!analyseTicker.trim()) return showToast('Enter a ticker symbol first');
     setAnalysing(true);
     try {
-      const res = await runDeepAnalysis(analyseTicker.trim(), predDate);
+      const res = await runDeepAnalysis(analyseTicker.trim(), predDate, tradeMode);
       await logAnalysisSnapshot(res);
       showToast(`✅ Analysis for ${analyseTicker.toUpperCase()} logged!`);
-      if (tab === 1) loadPrediction();
-      else loadToday();
-    } catch (_) { showToast('Analysis failed'); }
+      if (tab === 1) loadToday();
+      else if (tab === 2) loadPrediction();
+    } catch (_) {
+      showToast('Deep analysis execution failed.');
+    }
     setAnalysing(false);
   };
 
   return (
     <div className="p-4 max-w-7xl mx-auto space-y-4">
-      {/* Toast */}
       {toast && (
-        <div className="fixed top-20 right-4 z-50 px-4 py-2 rounded-lg text-sm font-medium shadow-xl"
-             style={{ background: '#0c1526', border: '1px solid #2979ff', color: '#e8f0fe' }}>
+        <div className="fixed top-20 right-4 z-50 px-4 py-2.5 rounded-lg text-xs font-semibold shadow-2xl border"
+             style={{ background: '#1c1815', borderColor: '#ff6b00', color: '#f5ebe1' }}>
           {toast}
         </div>
       )}
@@ -160,115 +172,214 @@ export default function AnalysisPage() {
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold" style={{ color: '#e8f0fe' }}>📊 Stock Analysis & AI Predictions</h1>
-          <p className="text-xs mt-0.5" style={{ color: '#8899b3' }}>
-            NSE/BSE deep analysis powered by AI agents · Indian market timeframe
+          <h1 className="text-xl font-bold flex items-center gap-2" style={{ color: '#f5ebe1' }}>
+            <span>📊 Stock Screener &amp; AI Analysis Engine</span>
+          </h1>
+          <p className="text-xs" style={{ color: '#a89b8c' }}>
+            Live quantitative screening, historical predictions, and accuracy benchmarks
           </p>
         </div>
-        <button onClick={loadToday} className="px-3 py-1.5 rounded-lg text-xs font-medium border transition-all hover:bg-blue-500/10"
-                style={{ borderColor: '#1a2d4a', color: '#8899b3' }}>
-          ↻ Refresh
-        </button>
+        <div className="flex items-center gap-2">
+          <select
+            value={tradeMode}
+            onChange={e => setTradeMode(e.target.value)}
+            className="rounded-lg px-2.5 py-1.5 text-xs font-semibold outline-none border"
+            style={{ background: '#1c1815', borderColor: '#382e26', color: '#ffaa00' }}
+          >
+            <option value="INTRADAY">Mode: INTRADAY</option>
+            <option value="DELIVERY">Mode: DELIVERY</option>
+          </select>
+          <button
+            onClick={() => { if (tab === 0) loadTopMovers(); else if (tab === 1) loadToday(); }}
+            className="px-3 py-1.5 rounded-lg text-xs border transition-all hover:border-orange-500/40"
+            style={{ borderColor: '#382e26', color: '#a89b8c' }}
+          >
+            ↻ Refresh
+          </button>
+        </div>
       </div>
 
-      {/* Tabs */}
-      <div className="flex gap-2 border-b" style={{ borderColor: '#1a2d4a' }}>
+      {/* Navigation Tabs */}
+      <div className="flex gap-2 border-b overflow-x-auto pb-1" style={{ borderColor: '#382e26' }}>
         {TABS.map((t, i) => (
-          <button key={i} onClick={() => setTab(i)}
-            className={`pb-2 px-3 text-sm font-medium border-b-2 transition-all ${
-              tab === i ? 'border-blue-500 text-blue-400' : 'border-transparent text-gray-500 hover:text-gray-300'
-            }`}>
+          <button
+            key={i}
+            onClick={() => setTab(i)}
+            className={`pb-2 px-3 text-xs font-bold border-b-2 transition-all whitespace-nowrap ${
+              tab === i ? 'border-orange-500 text-orange-400' : 'border-transparent text-stone-500 hover:text-stone-300'
+            }`}
+          >
             {t}
           </button>
         ))}
       </div>
 
-      {/* ── Tab 1: Today's Analysis ─────────────────────────────────────── */}
+      {/* Toolbar for On-Demand Analysis */}
+      <div className="card p-3 flex flex-wrap gap-2 items-center" style={{ background: '#1c1815' }}>
+        <input
+          value={analyseTicker}
+          onChange={e => setAnalyseTicker(e.target.value)}
+          placeholder="Analyze specific stock (e.g. RELIANCE.NS, TCS, INFY)"
+          className="flex-1 min-w-[200px] rounded-lg px-3 py-2 text-xs outline-none"
+          style={{ background: '#12100e', border: '1px solid #382e26', color: '#f5ebe1' }}
+        />
+        <button
+          onClick={runAnalysis}
+          disabled={analysing}
+          className="px-4 py-2 rounded-lg text-xs font-bold text-white transition-all hover:opacity-90 disabled:opacity-50"
+          style={{ background: 'linear-gradient(135deg, #ff6b00, #e65100)' }}
+        >
+          {analysing ? 'Evaluating…' : '⚡ Run Deep Analysis'}
+        </button>
+      </div>
+
+      {/* Tab 0: Top Movers Screener */}
       {tab === 0 && (
         <div className="space-y-4">
-          {/* Run analysis toolbar */}
-          <div className="card p-3 flex flex-wrap gap-2 items-center">
-            <input
-              value={analyseTicker} onChange={e => setAnalyseTicker(e.target.value)}
-              placeholder="e.g. RELIANCE.NS or TCS.NS"
-              className="flex-1 min-w-0 rounded-lg px-3 py-2 text-sm outline-none"
-              style={{ background: '#060b14', border: '1px solid #1a2d4a', color: '#e8f0fe' }}
-            />
-            <button
-              onClick={runAnalysis} disabled={analysing}
-              className="px-4 py-2 rounded-lg text-sm font-semibold text-white transition-all hover:opacity-90 disabled:opacity-50"
-              style={{ background: 'linear-gradient(135deg,#2979ff,#7c4dff)' }}>
-              {analysing ? 'Analysing…' : '🤖 Run AI Analysis'}
-            </button>
-          </div>
-
           {loading ? (
-            <div className="text-center py-12 text-sm" style={{ color: '#8899b3' }}>Loading today's data…</div>
+            <div className="card p-8 text-center text-xs" style={{ color: '#a89b8c' }}>Scanning Indian stock market top movers…</div>
+          ) : topMovers.length === 0 ? (
+            <div className="card p-8 text-center text-xs" style={{ color: '#a89b8c' }}>No top movers loaded. Click refresh to scan.</div>
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {topMovers.map((item, idx) => <AnalysisCard key={idx} item={item} />)}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Tab 1: Today's Analysis & Global Macro */}
+      {tab === 1 && (
+        <div className="space-y-4">
+          {loading ? (
+            <div className="card p-8 text-center text-xs" style={{ color: '#a89b8c' }}>Loading today's snapshots…</div>
           ) : todayData.length === 0 ? (
-            <div className="card p-8 text-center space-y-2">
-              <div className="text-4xl">📈</div>
-              <p className="text-sm font-medium" style={{ color: '#e8f0fe' }}>No analysis snapshots for today yet.</p>
-              <p className="text-xs" style={{ color: '#8899b3' }}>Use the toolbar above to run AI analysis for any ticker.</p>
+            <div className="card p-8 text-center text-xs" style={{ color: '#a89b8c' }}>
+              No analysis records stored for today. Run an analysis above.
             </div>
           ) : (
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {todayData.map(item => <AnalysisCard key={item.id} item={item} />)}
             </div>
           )}
 
-          {/* Global Macro News */}
-          <div>
-            <h2 className="text-sm font-bold mb-2" style={{ color: '#e8f0fe' }}>🌍 Global Macro &amp; World Events</h2>
-            <div className="space-y-2">
-              {macroNews.map((item, i) => <MacroCard key={i} item={item} />)}
+          {/* Macro News Feed */}
+          {macroNews.length > 0 && (
+            <div className="card p-4 space-y-3" style={{ background: '#1c1815' }}>
+              <h2 className="text-xs font-bold uppercase tracking-wider" style={{ color: '#ffaa00' }}>
+                🌍 Domestic &amp; Global Macro Pulse
+              </h2>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {macroNews.map((m, mIdx) => (
+                  <div key={mIdx} className="p-3 rounded-lg border text-xs" style={{ background: '#12100e', borderColor: '#2e251e' }}>
+                    <div className="flex justify-between items-start gap-2">
+                      <span className="font-semibold text-stone-200">{m.title}</span>
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${SENTIMENT_COLOR[m.sentiment] || 'badge-amber'}`}>
+                        {m.sentiment}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-[11px]" style={{ color: '#a89b8c' }}>{m.summary}</p>
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
         </div>
       )}
 
-      {/* ── Tab 2: Prediction by Date ──────────────────────────────────── */}
-      {tab === 1 && (
+      {/* Tab 2: Prediction by Date */}
+      {tab === 2 && (
         <div className="space-y-4">
-          {/* Date + Ticker filter */}
-          <div className="card p-3 flex flex-wrap gap-3 items-end">
+          <div className="card p-3 flex flex-wrap gap-2 items-end" style={{ background: '#1c1815' }}>
             <div className="flex flex-col gap-1">
-              <label className="text-xs" style={{ color: '#8899b3' }}>Select Date</label>
-              <input type="date" value={predDate} onChange={e => setPredDate(e.target.value)}
-                className="rounded-lg px-3 py-2 text-sm outline-none"
-                style={{ background: '#060b14', border: '1px solid #1a2d4a', color: '#e8f0fe' }}
-              />
-            </div>
-            <div className="flex flex-col gap-1 flex-1 min-w-0">
-              <label className="text-xs" style={{ color: '#8899b3' }}>Ticker (optional)</label>
+              <label className="text-[11px]" style={{ color: '#a89b8c' }}>Select Date</label>
               <input
-                value={predTicker} onChange={e => setPredTicker(e.target.value)}
-                placeholder="e.g. RELIANCE.NS"
-                className="w-full rounded-lg px-3 py-2 text-sm outline-none"
-                style={{ background: '#060b14', border: '1px solid #1a2d4a', color: '#e8f0fe' }}
+                type="date"
+                value={predDate}
+                onChange={e => setPredDate(e.target.value)}
+                className="rounded-lg px-2.5 py-1.5 text-xs outline-none"
+                style={{ background: '#12100e', border: '1px solid #382e26', color: '#f5ebe1' }}
               />
             </div>
-            <button onClick={loadPrediction} className="px-4 py-2 rounded-lg text-sm font-semibold text-white"
-                    style={{ background: '#2979ff' }}>
-              🔍 Fetch Predictions
-            </button>
-            <button onClick={runAnalysis} disabled={analysing}
-                    className="px-4 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-50"
-                    style={{ background: 'linear-gradient(135deg,#7c4dff,#2979ff)' }}>
-              {analysing ? 'Running…' : '🤖 Generate & Log'}
+            <div className="flex flex-col gap-1 flex-1 min-w-[150px]">
+              <label className="text-[11px]" style={{ color: '#a89b8c' }}>Ticker (optional)</label>
+              <input
+                value={predTicker}
+                onChange={e => setPredTicker(e.target.value)}
+                placeholder="e.g. RELIANCE.NS"
+                className="rounded-lg px-2.5 py-1.5 text-xs outline-none"
+                style={{ background: '#12100e', border: '1px solid #382e26', color: '#f5ebe1' }}
+              />
+            </div>
+            <button
+              onClick={loadPrediction}
+              className="px-4 py-2 rounded-lg text-xs font-bold text-white"
+              style={{ background: '#ff6b00' }}
+            >
+              Search Archive
             </button>
           </div>
 
-          {loading ? (
-            <div className="text-center py-12 text-sm" style={{ color: '#8899b3' }}>Fetching predictions…</div>
-          ) : predData.length === 0 ? (
-            <div className="card p-8 text-center space-y-2">
-              <div className="text-4xl">🗓️</div>
-              <p className="text-sm font-medium" style={{ color: '#e8f0fe' }}>No predictions found for {predDate}.</p>
-              <p className="text-xs" style={{ color: '#8899b3' }}>Enter a ticker and click "Generate & Log" to create one.</p>
+          {predData.length === 0 ? (
+            <div className="card p-8 text-center text-xs" style={{ color: '#a89b8c' }}>
+              No prediction snapshots found for date {predDate}.
             </div>
           ) : (
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {predData.map(item => <AnalysisCard key={item.id} item={item} />)}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Tab 3: Accuracy Tracker */}
+      {tab === 3 && (
+        <div className="space-y-4">
+          <div className="card p-3 flex flex-wrap gap-2 items-center" style={{ background: '#1c1815' }}>
+            <input
+              value={perfTicker}
+              onChange={e => setPerfTicker(e.target.value)}
+              placeholder="Enter ticker (e.g. RELIANCE.NS)"
+              className="flex-1 rounded-lg px-3 py-2 text-xs outline-none"
+              style={{ background: '#12100e', border: '1px solid #382e26', color: '#f5ebe1' }}
+            />
+            <button
+              onClick={loadPerformance}
+              className="px-4 py-2 rounded-lg text-xs font-bold text-white"
+              style={{ background: '#ff6b00' }}
+            >
+              Audit Accuracy
+            </button>
+          </div>
+
+          {perfResult && (
+            <div className="card p-4 space-y-4" style={{ background: '#1c1815' }}>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="p-3 rounded-lg text-center" style={{ background: '#12100e' }}>
+                  <div className="text-[10px]" style={{ color: '#a89b8c' }}>Overall Accuracy</div>
+                  <div className="text-xl font-bold" style={{ color: '#10b981' }}>
+                    {perfResult.overall_ai_accuracy_score_pct ?? '—'}%
+                  </div>
+                </div>
+                <div className="p-3 rounded-lg text-center" style={{ background: '#12100e' }}>
+                  <div className="text-[10px]" style={{ color: '#a89b8c' }}>Trust Rating</div>
+                  <div className="text-sm font-bold" style={{ color: '#ffaa00' }}>
+                    {perfResult.trust_rating ?? 'Evaluating'}
+                  </div>
+                </div>
+                <div className="p-3 rounded-lg text-center" style={{ background: '#12100e' }}>
+                  <div className="text-[10px]" style={{ color: '#a89b8c' }}>Total Snapshots</div>
+                  <div className="text-sm font-bold" style={{ color: '#f5ebe1' }}>
+                    {perfResult.total_snapshots ?? 0}
+                  </div>
+                </div>
+                <div className="p-3 rounded-lg text-center" style={{ background: '#12100e' }}>
+                  <div className="text-[10px]" style={{ color: '#a89b8c' }}>Live Market Price</div>
+                  <div className="text-sm font-bold" style={{ color: '#ff8533' }}>
+                    ₹{perfResult.live_current_price ?? '—'}
+                  </div>
+                </div>
+              </div>
             </div>
           )}
         </div>
