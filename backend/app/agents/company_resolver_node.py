@@ -11,14 +11,14 @@ the planner falls back to its old behavior of guessing the ticker
 itself. This can only make ticker accuracy better or neutral, never worse.
 """
 
-from app.agents.state import ConversationState
+from app.agents.state import TradingGraphState
 from app.services.company_resolver import CompanyResolutionError, resolve_companies
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
 
-async def company_resolver_node(state: ConversationState):
+async def company_resolver_node(state: TradingGraphState):
     entities = state.get("entities", [])
 
     if not entities:

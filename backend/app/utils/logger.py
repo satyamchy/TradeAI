@@ -1,4 +1,4 @@
-﻿import datetime
+import datetime
 import logging
 import os
 from logging.handlers import RotatingFileHandler
@@ -61,7 +61,7 @@ async def log_agent_event(
     """
     timestamp = datetime.datetime.utcnow()
     ticker_display = ticker if ticker else "N/A"
-    
+
     # Formatted statement block
     formatted_statement = (
         f"[{timestamp.isoformat()} UTC] AGENT: {agent_name} | "
@@ -90,3 +90,21 @@ async def log_agent_event(
             await session.commit()
     except Exception as exc:
         logger.warning("FAILED_TO_PERSIST_EVENT_LOG | error=%s", exc)
+
+
+def get_agent_logger(agent_name: str):
+    """
+    Returns an async log(...) callable pre-bound to a single agent_name, so call
+    sites don't have to repeat `agent_name="X"` on every single event:
+
+        log = get_agent_logger("WatchdogService")
+        await log("Starting cycle.")
+        await log(f"Failed on {ticker}: {err}", ticker=ticker, status="ERROR")
+
+    Equivalent to calling log_agent_event(agent_name=agent_name, ...) directly.
+    """
+
+    async def _log(message: str, ticker: Optional[str] = None, status: str = "INFO"):
+        await log_agent_event(agent_name=agent_name, message=message, ticker=ticker, status=status)
+
+    return _log

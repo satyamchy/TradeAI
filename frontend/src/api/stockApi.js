@@ -1,4 +1,4 @@
-﻿import axios from 'axios';
+import axios from 'axios';
 
 const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
@@ -43,6 +43,11 @@ export const fetchGuardrailStatus = ()         => api.get('/v1/trading/guardrail
 export const toggleTrading        = (enabled)  => api.post('/v1/trading/guardrails/toggle', { is_trading_enabled: enabled }).then(r => r.data);
 export const placeOrder           = (payload)  => api.post('/v1/trading/orders', payload).then(r => r.data);
 export const squareOffPosition    = (id, data) => api.post(`/v1/trading/square-off/${id}`, data).then(r => r.data);
+// ── DhanHQ Holdings (Read-Only GET Routes) ──────────────────────────────────
+export const fetchHoldings        = ()         => api.get('/v1/holdings').then(r => r.data);
+export const fetchHoldingDetail   = (symbol)   => api.get(`/v1/holdings/${symbol}`).then(r => r.data);
+
+
 
 // ── Scheduled Jobs & Cron ─────────────────────────────────────────────────────
 export const fetchJobs    = ()        => api.get('/v1/jobs/').then(r => r.data);

@@ -1,6 +1,6 @@
-﻿from langgraph.graph import START, END, StateGraph
+from langgraph.graph import START, END, StateGraph
 
-from app.agents.state import ConversationState, TradingGraphState
+from app.agents.state import TradingGraphState
 from app.agents.planner import planner_node
 from app.agents.router import router_node
 from app.agents.company_resolver_node import company_resolver_node
@@ -11,14 +11,14 @@ from app.agents.formatter import formatter_node
 MAX_LOOPS = 4  # hard safety cap: planner<->tool_executor round trips
 
 
-def initial_routing(state: ConversationState):
+def initial_routing(state: TradingGraphState):
     """Route background runs directly to planner bypassing conversational nodes."""
     if state.get("is_background_run", False):
         return "planner"
     return "router"
 
 
-def planner_router(state: ConversationState):
+def planner_router(state: TradingGraphState):
     is_bg = state.get("is_background_run", False)
 
     # If background run is finished or reached loop cap, route directly to formatter / END
@@ -41,7 +41,7 @@ def planner_router(state: ConversationState):
 
 
 def build_graph():
-    builder = StateGraph(ConversationState)
+    builder = StateGraph(TradingGraphState)
 
     builder.add_node("router", router_node)
     builder.add_node("company_resolver", company_resolver_node)
@@ -80,6 +80,6 @@ def build_graph():
     return builder.compile()
 
 
-# Global compiled graph pipeline instances
-trading_graph = build_graph()
-trading_compiled_graph = trading_graph
+# Single compiled graph instance, imported by app/api/conversation.py and
+# app/services/watchdog_service.py.
+trading_compiled_graph = build_graph()

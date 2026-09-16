@@ -5,9 +5,9 @@ All foreign/global stocks (Apple, Microsoft, etc.) have been removed.
 """
 
 import re
-from typing import List, Optional
+
 from app.schemas.finance.company import CompanyEntity
-from app.tools.finance.provider_factory import get_provider
+from app.services.market_data_service import fetch_stock_market_data
 
 # Canonical Indian market aliases
 COMMON_INDIAN_ALIASES = {
@@ -105,23 +105,25 @@ def resolve_ticker_symbol(text: str) -> str:
 
 async def resolve_company(text: str) -> CompanyEntity:
     ticker = resolve_ticker_symbol(text)
-    provider = get_provider()
-    profile = {}
     try:
-        profile = await provider.get_company_profile(ticker)
+        market_data = await fetch_stock_market_data(ticker)
+        quote = market_data.get("quote", {})
+        fundamentals = market_data.get("fundamentals", {})
+        name = quote.get("name") or ticker.replace(".NS", "")
+        sector = fundamentals.get("sector")
+        industry = fundamentals.get("industry")
     except Exception:
-        profile = {"name": ticker.replace(".NS", ""), "ticker": ticker}
-
-    if not profile.get("name"):
-        profile["name"] = ticker.replace(".NS", "")
+        name = ticker.replace(".NS", "")
+        sector = None
+        industry = None
 
     return CompanyEntity(
-        name=profile.get("name", ticker),
-        ticker=profile.get("ticker", ticker),
-        exchange=profile.get("exchange", "NSE"),
+        name=name,
+        ticker=ticker,
+        exchange="NSE",
         country="India",
-        sector=profile.get("sector"),
-        industry=profile.get("industry"),
+        sector=sector,
+        industry=industry,
     )
 
 

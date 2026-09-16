@@ -1,0 +1,25 @@
+fastapi>=0.116.0
+uvicorn[standard]>=0.35.0
+pydantic>=2.11.0
+pydantic-settings>=2.10.0
+
+# Database (SQLAlchemy + PostgreSQL + SQLite fallback)
+sqlalchemy>=2.0.0
+asyncpg>=0.29.0
+aiosqlite>=0.20.0
+
+# LangChain / AI Agent (conversational endpoint)
+langgraph>=0.6.0
+langchain-core>=0.3.70
+langchain-groq>=0.3.7
+
+# Utility
+python-dotenv>=1.1.1
+pytz>=2024.1
+yfinance>=0.2.40
+numpy>=1.24.0
+pytest>=8.0.0
+numexpr
+
+# DhanHQ Broker SDK — https://github.com/dhan-oss/DhanHQ-py
+dhanhq>=2.0.0

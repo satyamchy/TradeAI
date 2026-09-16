@@ -1,4 +1,4 @@
-﻿"""
+"""
 Automation & Scheduled Analysis Jobs API Router.
 Manages cron-based batch analysis tasks and logs execution status.
 
@@ -14,29 +14,11 @@ import datetime
 from typing import Optional
 from fastapi import APIRouter, HTTPException
 from sqlalchemy.future import select
-from pydantic import BaseModel
-from app.database import AsyncSessionLocal
-from app.models.stock_models import AnalysisJob, JobExecutionLog
+from app.db.base import AsyncSessionLocal
+from app.db.models import AnalysisJob, JobExecutionLog
+from app.schemas.jobs import JobCreateRequest
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
-
-
-class JobCreateRequest(BaseModel):
-    """
-    Scheduled Job Creation Payload.
-    
-    Fields:
-    - title (str): Friendly title (e.g. 'Pre-Market NIFTY50 scan')
-    - job_type (str, optional): 'CRON' or 'NORMAL' (default 'CRON')
-    - tickers (str): Comma-separated list of symbols (e.g. 'RELIANCE.NS,TCS.NS,INFY.NS')
-    - cron_expression (str, optional): Standard 5-field cron string (default '15 9 * * 1-5' for 9:15 AM Mon-Fri)
-    - market_hours_only (bool, optional): True to restrict execution to 9:15-15:30 IST
-    """
-    title: str
-    job_type: Optional[str] = "CRON"
-    tickers: str
-    cron_expression: Optional[str] = "15 9 * * 1-5"
-    market_hours_only: Optional[bool] = True
 
 
 def _compute_next_run(cron_expr: str) -> str:

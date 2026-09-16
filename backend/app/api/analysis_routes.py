@@ -1,4 +1,4 @@
-﻿"""
+"""
 Historical Analysis & Prediction Snapshots API Router.
 Provides queries for recorded AI stock analysis predictions and manual snapshot creation.
 
@@ -12,8 +12,8 @@ import datetime
 from typing import Optional
 from fastapi import APIRouter, Query, HTTPException
 from sqlalchemy.future import select
-from app.database import AsyncSessionLocal
-from app.models.stock_models import StockAnalysisSnapshot
+from app.db.base import AsyncSessionLocal
+from app.db.models import StockAnalysisSnapshot
 
 router = APIRouter(prefix="/analysis", tags=["analysis"])
 

@@ -4,6 +4,7 @@ import ConversationPage from './pages/ConversationPage.jsx';
 import AnalysisPage from './pages/AnalysisPage.jsx';
 import TradeLoggingPage from './pages/TradeLoggingPage.jsx';
 import JobSchedulerPage from './pages/JobSchedulerPage.jsx';
+import HoldingsPage from './pages/HoldingsPage.jsx';
 
 function App() {
   return (
@@ -14,6 +15,7 @@ function App() {
           <Routes>
             <Route path="/chat" element={<ConversationPage />} />
             <Route path="/analysis" element={<AnalysisPage />} />
+            <Route path="/holdings" element={<HoldingsPage />} />
             <Route path="/trades" element={<TradeLoggingPage />} />
             <Route path="/jobs" element={<JobSchedulerPage />} />
             <Route path="*" element={<Navigate to="/chat" replace />} />

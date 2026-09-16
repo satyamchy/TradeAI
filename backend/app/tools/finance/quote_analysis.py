@@ -1,82 +1,66 @@
+"""
+stock_analyzer tool — used by the conversational agent (app/api/conversation.py).
+
+Previously this had its own yfinance-calling path (via a provider_factory/
+FinancialDataProvider abstraction) with its own copy of RSI/MACD/etc. math
+in app/calculations/finance_calcs.py — a second, parallel implementation of
+exactly what app/services/market_data_service.py + technical_analysis_service.py
+already do for the rest of the app (recommendation flow, /stocks/analyze,
+the harness). That duplication is gone: this tool now calls the same two
+services everything else calls, so there is exactly one place that talks to
+yfinance and exactly one place that computes indicators.
+"""
+
 import logging
 
-import numpy as np
-
-from app.calculations.finance_calcs import (
-    calculate_rsi,
-    calculate_sma,
-    calculate_ema,
-    calculate_volatility,
-    calculate_period_return,
-    calculate_macd,
-    calculate_bollinger_bands,
-    calculate_pivot_points,
-    calculate_volume_trend,
-    calculate_drawdown,
-)
-from app.tools.finance.provider_factory import get_provider
+from app.services.company_resolver import resolve_ticker_symbol
+from app.services.market_data_service import fetch_stock_market_data
+from app.services.technical_analysis_service import run_technical_analysis
 
 logger = logging.getLogger(__name__)
 
 MANIFEST = {
     "name": "stock_analyzer",
-    "description": "Fetch price history and compute complete technical indicators (SMA, EMA, RSI, MACD, Bollinger Bands, Pivot Points, Volatility, Drawdown) for a stock ticker.",
+    "description": "Fetch price history and compute technical indicators (SMA, EMA, RSI, MACD, Bollinger Bands, support/resistance, volatility) for a stock ticker.",
     "input_schema": {
-        "ticker": "stock ticker symbol, e.g. TCS.NS or AAPL",
-        "period": "optional lookback window, e.g. '3mo', '6mo', '1y' — defaults to 6mo",
+        "ticker": "stock ticker symbol or company name, e.g. 'TCS.NS' or 'Reliance'",
+        "analysis_type": "optional — 'intraday' or 'delivery' (longer-horizon), defaults to 'delivery'",
     },
 }
 
 
-async def stock_analyzer(ticker: str, period: str = "6mo") -> dict:
-    provider = get_provider()
+async def stock_analyzer(ticker: str, analysis_type: str = "delivery") -> dict:
+    canonical = resolve_ticker_symbol(ticker)
 
     try:
-        history = await provider.get_historical_prices(ticker, period)
-        quote = await provider.get_quote(ticker)
-        profile = await provider.get_company_profile(ticker)
+        market_data = await fetch_stock_market_data(canonical)
+        technicals = run_technical_analysis(market_data, analysis_type=analysis_type)
     except Exception as e:
-        logger.exception("STOCK_ANALYZER_FAILED | ticker=%s period=%s", ticker, period)
-        raise RuntimeError(f"stock_analyzer failed for ticker='{ticker}': {e}") from e
+        logger.exception("STOCK_ANALYZER_FAILED | ticker=%s", canonical)
+        raise RuntimeError(f"stock_analyzer failed for ticker='{canonical}': {e}") from e
 
-    closes = np.array(history.get("close", []))
-    highs = history.get("high", [])
-    lows = history.get("low", [])
-    volumes = np.array(history.get("volume", []))
-
-    # Calculate Pivot Points from recent high, low, close
-    recent_high = max(highs[-5:]) if len(highs) >= 5 else (quote.get("52_week_high") or (closes[-1] if len(closes) > 0 else 0))
-    recent_low = min(lows[-5:]) if len(lows) >= 5 else (quote.get("52_week_low") or (closes[-1] if len(closes) > 0 else 0))
-    current_close = quote.get("current_price") or (closes[-1] if len(closes) > 0 else 0)
-
-    pivots = calculate_pivot_points(high=recent_high, low=recent_low, close=current_close)
-
-    indicators = {
-        "sma_20": calculate_sma(closes, window=20),
-        "sma_50": calculate_sma(closes, window=50),
-        "ema_20": calculate_ema(closes, window=20),
-        "rsi_14": calculate_rsi(closes, window=14),
-        "macd": calculate_macd(closes),
-        "bollinger_bands": calculate_bollinger_bands(closes, window=20),
-        "pivot_points": pivots,
-        "volume_trend_ratio": calculate_volume_trend(volumes, window=10) if len(volumes) > 0 else None,
-        "max_drawdown_pct": calculate_drawdown(closes),
-        "annualized_volatility_pct": calculate_volatility(closes),
-        "period_return_pct": calculate_period_return(closes),
-    }
+    quote = market_data.get("quote", {})
+    fundamentals = market_data.get("fundamentals", {})
+    history = market_data.get("history", [])
 
     return {
-        "ticker": ticker.upper(),
-        "name": profile.get("name") or ticker.upper(),
+        "ticker": canonical,
+        "name": quote.get("name") or canonical,
         "currency": quote.get("currency", "INR"),
-        "current_price": current_close,
+        "current_price": quote.get("current_price"),
         "52_week_high": quote.get("52_week_high"),
         "52_week_low": quote.get("52_week_low"),
-        "pe_ratio": quote.get("pe_ratio"),
-        "market_cap": quote.get("market_cap"),
-        "recent_closes": history.get("close", [])[-5:],
-        "indicators": indicators,
-        "period_analyzed": period,
+        "pe_ratio": fundamentals.get("pe_ratio"),
+        "market_cap": fundamentals.get("market_cap"),
+        "recent_closes": [c.get("close") for c in history[-5:]],
+        "trend": technicals.get("trend"),
+        "rsi_14": technicals.get("rsi_14"),
+        "macd": technicals.get("macd"),
+        "moving_averages": technicals.get("moving_averages"),
+        "bollinger_bands": technicals.get("bollinger_bands"),
+        "support_resistance": technicals.get("support_resistance"),
+        "atr": technicals.get("atr"),
+        "volume_analysis": technicals.get("volume_analysis"),
+        "period_analyzed": analysis_type,
         "data_source": "yfinance",
     }
-

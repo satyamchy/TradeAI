@@ -1,0 +1,31 @@
+2026-09-09 01:11:04,831 | INFO | agent_event | [2026-09-08T19:41:04.831272 UTC] AGENT: TestAgent | TICKER: TCS.NS | STATUS: INFO | Audit test message
+2026-09-09 01:11:04,870 | WARNING | agent_event | FAILED_TO_PERSIST_AGENT_LOG | error=(sqlite3.OperationalError) no such table: agent_logs
+[SQL: INSERT INTO agent_logs (timestamp, agent_name, ticker, status, message) VALUES (?, ?, ?, ?, ?)]
+[parameters: ('2026-09-08 19:41:04.831272', 'TestAgent', 'TCS.NS', 'INFO', 'Audit test message')]
+(Background on this error at: https://sqlalche.me/e/20/e3q8)
+2026-09-09 01:11:22,804 | INFO | agent_event | [2026-09-08T19:41:22.804741 UTC] AGENT: TestAgent | TICKER: TCS.NS | STATUS: INFO | Audit test message
+2026-09-09 01:11:40,514 | INFO | agent_event | [2026-09-08T19:41:40.514723 UTC] AGENT: WatchdogService | TICKER: N/A | STATUS: INFO | Initiating periodic active positions watchdog cycle.
+2026-09-09 01:11:40,543 | INFO | agent_event | [2026-09-08T19:41:40.543613 UTC] AGENT: WatchdogService | TICKER: N/A | STATUS: INFO | Found 1 open positions to evaluate.
+2026-09-09 01:11:40,560 | INFO | agent_event | [2026-09-08T19:41:40.560455 UTC] AGENT: WatchdogService | TICKER: RELIANCE.NS | STATUS: INFO | Invoking graph pipeline for active position ID=1, ticker=RELIANCE.NS
+2026-09-09 01:11:40,835 | INFO | app.agents.planner | PLANNER_ACTIVE_POSITION_EVALUATION | pos_id=1 | ticker=RELIANCE.NS
+2026-09-09 01:11:40,840 | INFO | app.agents.tool_executor | TOOL_EXECUTOR_START | tools=['stock_analyzer']
+2026-09-09 01:11:40,842 | INFO | app.agents.tool_executor | TOOL_CALL_START | id=a7b3d7af-6150-4e2c-ac1c-f32943578b3b | tool=stock_analyzer | input={'ticker': 'RELIANCE.NS'}
+2026-09-09 01:11:50,133 | INFO | app.agents.tool_executor | TOOL_CALL_SUCCESS | id=a7b3d7af-6150-4e2c-ac1c-f32943578b3b | tool=stock_analyzer | duration=9.294s
+2026-09-09 01:11:50,167 | INFO | app.agents.tool_executor | ACTIVE_POSITION_UPDATED | id=1 | ticker=RELIANCE.NS | price=1294.9
+2026-09-09 01:11:50,168 | INFO | app.agents.tool_executor | TOOL_EXECUTOR_COMPLETE | executed=1 | successful=1 | new_sources=1
+2026-09-09 01:11:50,172 | INFO | app.agents.planner | PLANNER_BG_COMPLETE | pos_id=1 | ticker=RELIANCE.NS
+2026-09-09 01:11:50,457 | ERROR | agent_event | [2026-09-08T19:41:50.457578 UTC] AGENT: WatchdogService | TICKER: RELIANCE.NS | STATUS: ERROR | Failed evaluating active position ID=1: Error code: 401 - {'error': {'message': 'Invalid API Key', 'type': 'invalid_request_error', 'code': 'invalid_api_key'}}
+2026-09-09 01:12:46,556 | INFO | agent_event | [2026-09-08T19:42:46.556846 UTC] AGENT: WatchdogService | TICKER: N/A | STATUS: INFO | Initiating periodic active positions watchdog cycle.
+2026-09-09 01:12:46,585 | INFO | agent_event | [2026-09-08T19:42:46.585029 UTC] AGENT: WatchdogService | TICKER: N/A | STATUS: INFO | Found 1 open positions to evaluate.
+2026-09-09 01:12:46,605 | INFO | agent_event | [2026-09-08T19:42:46.605395 UTC] AGENT: WatchdogService | TICKER: TCS.NS | STATUS: INFO | Invoking graph pipeline for active position ID=2, ticker=TCS.NS
+2026-09-09 01:12:46,716 | INFO | app.agents.planner | PLANNER_ACTIVE_POSITION_EVALUATION | pos_id=2 | ticker=TCS.NS
+2026-09-09 01:12:46,723 | INFO | app.agents.tool_executor | TOOL_EXECUTOR_START | tools=['stock_analyzer']
+2026-09-09 01:12:46,723 | INFO | app.agents.tool_executor | TOOL_CALL_START | id=53ea0cc1-9669-4dbf-a8a1-e6353f3e9de3 | tool=stock_analyzer | input={'ticker': 'TCS.NS'}
+2026-09-09 01:13:02,920 | INFO | app.agents.tool_executor | TOOL_CALL_SUCCESS | id=53ea0cc1-9669-4dbf-a8a1-e6353f3e9de3 | tool=stock_analyzer | duration=16.197s
+2026-09-09 01:13:02,970 | INFO | app.agents.tool_executor | ACTIVE_POSITION_UPDATED | id=2 | ticker=TCS.NS | price=2255.5
+2026-09-09 01:13:02,974 | INFO | app.agents.tool_executor | TOOL_EXECUTOR_COMPLETE | executed=1 | successful=1 | new_sources=1
+2026-09-09 01:13:02,978 | INFO | app.agents.planner | PLANNER_BG_COMPLETE | pos_id=2 | ticker=TCS.NS
+2026-09-09 01:13:02,986 | INFO | agent_event | [2026-09-08T19:43:02.986341 UTC] AGENT: WatchdogService | TICKER: TCS.NS | STATUS: SUCCESS | Successfully evaluated active position ID=2.
+2026-09-09 01:19:30,440 | INFO | agent_event | [2026-09-08T19:49:30.440751 UTC] AGENT: SystemVerifier | TICKER: INFY.NS | STATUS: INFO | Stored in event_logs table
+2026-09-09 01:20:42,914 | INFO | agent_event | [2026-09-08T19:50:42.914329 UTC] AGENT: WatchdogService | TICKER: N/A | STATUS: INFO | Initiating periodic active positions watchdog cycle.
+2026-09-09 01:20:42,956 | INFO | agent_event | [2026-09-08T19:50:42.956916 UTC] AGENT: WatchdogService | TICKER: N/A | STATUS: INFO | No open active positions found to evaluate.

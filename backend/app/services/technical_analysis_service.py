@@ -5,7 +5,7 @@ SMA, EMA, RSI, MACD, Bollinger Bands, ATR, RVOL, Momentum, Support/Resistance, P
 Differentiates between Intraday and Delivery analysis.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 import numpy as np
 
 

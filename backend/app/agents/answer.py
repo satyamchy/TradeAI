@@ -1,9 +1,9 @@
 from langchain_core.prompts import ChatPromptTemplate
 
-from app.llm.groq import get_llm
+from app.integrations.llm.groq_client import get_llm
 from app.prompts.answer_prompt import ANSWER_PROMPT
 from app.utils.context_builder import build_context
-from app.agents.state import ConversationState
+from app.agents.state import TradingGraphState
 
 llm = get_llm()
 
@@ -27,7 +27,7 @@ chain = prompt | llm
 
 
 async def answer_node(
-    state: ConversationState,
+    state: TradingGraphState,
 ):
     context = build_context(
         state["sources"]

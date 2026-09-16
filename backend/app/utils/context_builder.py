@@ -1,6 +1,3 @@
-from typing import List
-
-
 def build_context(
     sources: list[dict]
 ):

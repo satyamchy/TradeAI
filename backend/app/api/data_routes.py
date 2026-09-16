@@ -1,4 +1,4 @@
-﻿"""
+"""
 Market Data & Quantitative Analytics API Router.
 Wires live market data, multi-step candlestick charts, and deep analysis.
 
@@ -11,7 +11,7 @@ Endpoints:
 
 import datetime
 from typing import Optional
-from fastapi import APIRouter, Query, HTTPException
+from fastapi import APIRouter
 from app.services.market_data_service import (
     get_global_macro_news_feed,
     get_indian_market_status,
@@ -20,8 +20,8 @@ from app.services.market_data_service import (
 from app.services.company_resolver import resolve_ticker_symbol
 from app.services.technical_analysis_service import run_technical_analysis
 from app.services.ai_analysis_service import generate_ai_stock_analysis
-from app.database import AsyncSessionLocal
-from app.models.stock_models import StockTradeLog, StockAnalysisSnapshot
+from app.db.base import AsyncSessionLocal
+from app.db.models import StockTradeLog
 from sqlalchemy.future import select
 
 router = APIRouter(prefix="/data", tags=["data"])

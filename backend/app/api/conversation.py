@@ -1,4 +1,4 @@
-﻿"""
+"""
 Conversation API Router.
 Provides conversational multi-horizon decision support for Indian stocks.
 
@@ -7,50 +7,17 @@ Endpoints:
 - GET  /api/conversation: Backwards-compatible GET query handler.
 """
 
-from typing import List, Optional, Any, Dict
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
 
 from app.agents.graph import trading_compiled_graph
 from app.agents.state import TradingGraphState
-from app.utils.logger import log_agent_event, get_logger
-from app.schemas.conversation import Source, RunResponse
+from app.utils.logger import get_agent_logger, get_logger
+from app.schemas.conversation import Source, ChatRequest, ChatResponse
 
 logger = get_logger(__name__)
+log = get_agent_logger("ConversationRouter")
 
 router = APIRouter(tags=["conversation"])
-
-
-class ChatRequest(BaseModel):
-    """
-    Inbound conversation query payload.
-    
-    Fields:
-    - query (str, required): Natural language question or command (e.g. 'Analyze TCS for intraday trading').
-    - ticker (str, optional): Optional explicit ticker symbol (e.g. 'TCS.NS', 'RELIANCE.NS').
-    """
-    query: str = Field(..., description="Inbound user query for the AI agent")
-    ticker: Optional[str] = Field(None, description="Optional target ticker symbol")
-
-
-class ChatResponse(BaseModel):
-    """
-    Structured conversational response.
-    
-    Fields:
-    - query (str): The original user query.
-    - answer (str): Markdown-formatted multi-horizon analysis and AI reasoning.
-    - sources (List[Source]): Retrieved citations and data references.
-    - structured_data (Optional[Dict[str, Any]]): Structured financial indicator payload if a stock tool was invoked.
-    - success (bool): True if execution completed without fatal errors.
-    - message (str): Status message ('ok' or error detail).
-    """
-    query: str
-    answer: str
-    sources: List[Source] = []
-    structured_data: Optional[Dict[str, Any]] = None
-    success: bool = True
-    message: str = "ok"
 
 
 @router.post("", response_model=ChatResponse)
@@ -86,12 +53,7 @@ async def process_conversation(req: ChatRequest):
 
     target_ticker = req.ticker.strip().upper() if req.ticker else None
 
-    await log_agent_event(
-        agent_name="ConversationRouter",
-        message=f"Received inbound user query: '{user_query}'",
-        ticker=target_ticker,
-        status="INFO",
-    )
+    await log(f"Received inbound user query: '{user_query}'", ticker=target_ticker)
 
     initial_state: TradingGraphState = {
         "messages": [],
@@ -140,14 +102,10 @@ async def process_conversation(req: ChatRequest):
                     )
 
         has_error = bool(result.get("error"))
-        status_str = "ERROR" if has_error else "SUCCESS"
-        log_msg = f"Completed run for query '{user_query}'. Result: {result.get('error') or 'OK'}"
-
-        await log_agent_event(
-            agent_name="ConversationRouter",
-            message=log_msg,
+        await log(
+            f"Completed run for query '{user_query}'. Result: {result.get('error') or 'OK'}",
             ticker=target_ticker,
-            status=status_str,
+            status="ERROR" if has_error else "SUCCESS",
         )
 
         return ChatResponse(
@@ -160,12 +118,7 @@ async def process_conversation(req: ChatRequest):
         )
 
     except Exception as exc:
-        await log_agent_event(
-            agent_name="ConversationRouter",
-            message=f"Failed processing query '{user_query}': {str(exc)}",
-            ticker=target_ticker,
-            status="ERROR",
-        )
+        await log(f"Failed processing query '{user_query}': {exc}", ticker=target_ticker, status="ERROR")
         raise HTTPException(status_code=500, detail=str(exc))
 
 

@@ -1,4 +1,4 @@
-﻿"""
+"""
 Historical Snapshots & Accuracy Performance API Router.
 Compares past AI analysis snapshots against current live market prices.
 

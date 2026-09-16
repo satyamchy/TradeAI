@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { fetchMarketStatus, fetchMarketIndices, fetchGuardrailStatus, toggleTrading } from '../api/stockApi';
 
@@ -45,9 +45,11 @@ export default function Navbar() {
   const navLinks = [
     { to: '/chat', label: '💬 AI Agent Chat' },
     { to: '/analysis', label: '📊 Stock Analysis' },
+    { to: '/holdings', label: '💼 Dhan Holdings' },
     { to: '/trades', label: '💹 Live Trades & P&L' },
     { to: '/jobs', label: '⏱️ Jobs & Watchdog' },
   ];
+
 
   return (
     <header className="border-b" style={{ background: '#181411', borderColor: '#382e26' }}>

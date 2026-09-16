@@ -1,11 +1,9 @@
-﻿import datetime
-from sqlalchemy.future import select
 from langchain_core.prompts import ChatPromptTemplate
 
 from app.schemas.planner import PlannerResponse, ToolStep
 from app.prompts.planner_prompt import PLANNER_PROMPT
-from app.llm.groq import get_llm
-from app.agents.state import ConversationState
+from app.integrations.llm.groq_client import get_llm
+from app.agents.state import TradingGraphState
 from app.utils.logger import get_logger
 from app.db.base import AsyncSessionLocal
 from app.db.models import ActivePosition
@@ -45,7 +43,7 @@ def _already_searched(query: str, tool_outputs: list) -> bool:
     return False
 
 
-async def planner_node(state: ConversationState):
+async def planner_node(state: TradingGraphState):
     loop_count = state.get("loop_count", 0) + 1
     is_bg = state.get("is_background_run", False)
     active_pos_id = state.get("active_position_id")

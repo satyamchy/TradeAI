@@ -1,13 +1,13 @@
-﻿import asyncio
 import datetime
 from sqlalchemy.future import select
 
 from app.db.base import AsyncSessionLocal
 from app.db.models import ActivePosition
 from app.agents.graph import trading_compiled_graph
-from app.utils.logger import log_agent_event, get_logger
+from app.utils.logger import get_agent_logger, get_logger
 
 logger = get_logger(__name__)
+log = get_agent_logger("WatchdogService")
 
 
 async def evaluate_active_positions():
@@ -15,11 +15,7 @@ async def evaluate_active_positions():
     Processes periodic evaluations on active rows in active_positions table,
     binding execution to the global compiled graph pipeline.
     """
-    await log_agent_event(
-        agent_name="WatchdogService",
-        message="Initiating periodic active positions watchdog cycle.",
-        status="INFO",
-    )
+    await log("Initiating periodic active positions watchdog cycle.")
 
     try:
         async with AsyncSessionLocal() as session:
@@ -28,26 +24,16 @@ async def evaluate_active_positions():
             open_positions = result.scalars().all()
 
         if not open_positions:
-            await log_agent_event(
-                agent_name="WatchdogService",
-                message="No open active positions found to evaluate.",
-                status="INFO",
-            )
+            await log("No open active positions found to evaluate.")
             return {"evaluated_count": 0, "positions": []}
 
-        await log_agent_event(
-            agent_name="WatchdogService",
-            message=f"Found {len(open_positions)} open positions to evaluate.",
-            status="INFO",
-        )
+        await log(f"Found {len(open_positions)} open positions to evaluate.")
 
         results = []
         for pos in open_positions:
-            await log_agent_event(
-                agent_name="WatchdogService",
-                message=f"Invoking graph pipeline for active position ID={pos.id}, ticker={pos.ticker}",
+            await log(
+                f"Invoking graph pipeline for active position ID={pos.id}, ticker={pos.ticker}",
                 ticker=pos.ticker,
-                status="INFO",
             )
 
             # Bind execution to global compiled graph pipeline
@@ -80,12 +66,7 @@ async def evaluate_active_positions():
             try:
                 graph_output = await trading_compiled_graph.ainvoke(initial_state)
 
-                await log_agent_event(
-                    agent_name="WatchdogService",
-                    message=f"Successfully evaluated active position ID={pos.id}.",
-                    ticker=pos.ticker,
-                    status="SUCCESS",
-                )
+                await log(f"Successfully evaluated active position ID={pos.id}.", ticker=pos.ticker, status="SUCCESS")
 
                 results.append({
                     "id": pos.id,
@@ -94,12 +75,7 @@ async def evaluate_active_positions():
                     "error": graph_output.get("error", ""),
                 })
             except Exception as eval_err:
-                await log_agent_event(
-                    agent_name="WatchdogService",
-                    message=f"Failed evaluating active position ID={pos.id}: {str(eval_err)}",
-                    ticker=pos.ticker,
-                    status="ERROR",
-                )
+                await log(f"Failed evaluating active position ID={pos.id}: {eval_err}", ticker=pos.ticker, status="ERROR")
                 results.append({
                     "id": pos.id,
                     "ticker": pos.ticker,
@@ -114,9 +90,5 @@ async def evaluate_active_positions():
         }
 
     except Exception as exc:
-        await log_agent_event(
-            agent_name="WatchdogService",
-            message=f"Watchdog evaluation loop encountered exception: {str(exc)}",
-            status="ERROR",
-        )
+        await log(f"Watchdog evaluation loop encountered exception: {exc}", status="ERROR")
         return {"evaluated_count": 0, "error": str(exc)}

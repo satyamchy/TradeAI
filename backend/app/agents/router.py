@@ -13,8 +13,8 @@ nothing breaks or forks yet; this node is purely additive.
 
 from langchain_core.prompts import ChatPromptTemplate
 
-from app.agents.state import ConversationState
-from app.llm.groq import get_llm
+from app.agents.state import TradingGraphState
+from app.integrations.llm.groq_client import get_llm
 from app.prompts.router_prompt import ROUTER_PROMPT
 from app.schemas.router import RouteDecision
 from app.utils.logger import get_logger
@@ -32,7 +32,7 @@ router_prompt = ChatPromptTemplate.from_messages(
 )
 
 
-async def router_node(state: ConversationState):
+async def router_node(state: TradingGraphState):
     chain = router_prompt | router_llm
 
     response = await chain.ainvoke({"query": state["query"]})

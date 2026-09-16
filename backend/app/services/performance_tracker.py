@@ -1,9 +1,9 @@
 import logging
 import datetime
 from sqlalchemy.future import select
-from app.database import AsyncSessionLocal, init_db
-from app.models.stock_models import StockAnalysisSnapshot
-from app.tools.finance.provider_factory import get_provider
+from app.db.base import AsyncSessionLocal, init_db
+from app.db.models import StockAnalysisSnapshot
+from app.services.market_data_service import fetch_stock_market_data
 
 logger = logging.getLogger(__name__)
 
@@ -77,8 +77,8 @@ async def evaluate_performance_history(ticker: str) -> dict:
             }
 
         # Fetch live current market price
-        provider = get_provider()
-        quote = await provider.get_quote(ticker_clean)
+        market_data = await fetch_stock_market_data(ticker_clean)
+        quote = market_data.get("quote", {})
         live_price = quote.get("current_price") or snapshots[0].initial_price
 
         performance_history = []

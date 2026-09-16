@@ -1,8 +1,8 @@
-from app.agents.state import ConversationState
+from app.agents.state import TradingGraphState
 
 
 async def formatter_node(
-    state: ConversationState,
+    state: TradingGraphState,
 ):
 
     answer = (state.get("answer") or "").strip()
@@ -23,4 +23,4 @@ async def formatter_node(
         "sources": sources,
         "structured_data": structured_data,
         "error": state.get("error", "")
-    }
+    }

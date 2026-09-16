@@ -1,4 +1,4 @@
-﻿"""
+"""
 Stock Market Analysis API Router.
 Handles single, multi-symbol, and top-mover equity evaluations with automatic database snapshot logging.
 
@@ -8,67 +8,17 @@ Endpoints:
 
 import datetime
 from typing import Any, Dict, List, Optional
-from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, HTTPException
 
 from app.services.company_resolver import resolve_ticker_symbol
 from app.services.market_data_service import fetch_stock_market_data, fetch_top_intraday_movers
 from app.services.technical_analysis_service import run_technical_analysis
 from app.services.ai_analysis_service import generate_ai_stock_analysis
-from app.database import AsyncSessionLocal
-from app.models.stock_models import StockAnalysisSnapshot
+from app.db.base import AsyncSessionLocal
+from app.db.models import StockAnalysisSnapshot
+from app.schemas.stock_analysis import StockAnalyzeRequest, SingleStockAnalysisResponse
 
 router = APIRouter(prefix="/stocks", tags=["stocks"])
-
-
-class StockAnalyzeRequest(BaseModel):
-    """
-    Stock Analysis Request Payload.
-    
-    Fields:
-    - mode (str): 'selected' (analyze specific tickers) or 'top_movers' (analyze top intraday gainers).
-    - symbols (List[str], optional): List of tickers or company names (e.g. ['RELIANCE.NS', 'TCS']).
-    - analysis_type (str): 'intraday' or 'delivery' (default 'intraday').
-    - date (str, optional): 'YYYY-MM-DD' analysis reference date.
-    - top_n (int, optional): Number of top movers to fetch if mode='top_movers' (default 5).
-    """
-    mode: str = Field(default="selected", description="selected | top_movers")
-    symbols: Optional[List[str]] = Field(default=None, description="List of tickers or stock names, e.g. ['TCS.NS', 'Analyze Reliance']")
-    analysis_type: str = Field(default="intraday", description="intraday | delivery")
-    date: Optional[str] = Field(default=None, description="YYYY-MM-DD date string")
-    top_n: Optional[int] = Field(default=5, description="Number of top movers to return if mode='top_movers'")
-
-
-class SingleStockAnalysisResponse(BaseModel):
-    """
-    Stock Analysis Result Item.
-    
-    Fields:
-    - symbol (str): Resolved ticker symbol.
-    - analysis_type (str): 'intraday' or 'delivery'.
-    - market_data (Dict): Raw quote, fundamentals, and summary.
-    - technical_analysis (Dict): Quantitative RSI, MACD, Pivot Points, Moving Averages.
-    - recommendation (str): 'BUY', 'HOLD', or 'AVOID'.
-    - confidence (float): Score 0.0 - 1.0.
-    - risk_level (str): 'LOW', 'MEDIUM', or 'HIGH'.
-    - summary (str): Natural language evaluation summary.
-    - key_signals (List[str]): Bullet points of technical indicators triggered.
-    - risks (List[str]): Market/technical risk factors.
-    - selling_point (str): Primary execution rationale.
-    - disclaimer (str): Mandatory compliance disclaimer.
-    """
-    symbol: str
-    analysis_type: str
-    market_data: Dict[str, Any]
-    technical_analysis: Dict[str, Any]
-    recommendation: str
-    confidence: float
-    risk_level: str
-    summary: str
-    key_signals: List[str]
-    risks: List[str]
-    selling_point: str
-    disclaimer: str = "AI-generated financial decision support only. Not financial or investment advice."
 
 
 async def _log_analysis_to_db(result: Dict[str, Any], date_str: str) -> Optional[int]:

@@ -11,8 +11,8 @@ summary, key_signals, risks, and selling_point.
 import json
 import logging
 import re
-from typing import Any, Dict, List, Optional
-from app.llm.groq import get_llm
+from typing import Any, Dict
+from app.integrations.llm.groq_client import get_llm
 from langchain_core.messages import SystemMessage, HumanMessage
 
 logger = logging.getLogger(__name__)

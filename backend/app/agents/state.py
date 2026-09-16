@@ -1,4 +1,4 @@
-﻿import operator
+import operator
 from typing import Annotated, Any, Optional
 from typing_extensions import TypedDict
 
@@ -7,7 +7,7 @@ from langgraph.graph.message import add_messages
 
 from app.schemas.planner import ToolStep
 
-class ConversationState(TypedDict):
+class TradingGraphState(TypedDict):
 
     # Conversation history
     messages: Annotated[list[BaseMessage], add_messages]
@@ -40,5 +40,3 @@ class ConversationState(TypedDict):
     ticker: Optional[str]
     position_data: Optional[dict]
 
-# Type alias for trading state
-TradingGraphState = ConversationState

@@ -374,8 +374,16 @@ def _sync_fetch_top_intraday_movers(date_str: Optional[str] = None, top_n: int =
             day_range_pct = ((high - low) / prev * 100.0) if prev > 0 else 0.0
             momentum = pct_change * 1.5
 
-            # Intraday mover composite score = abs(pct_change) * 0.4 + rvol * 0.3 + day_range_pct * 0.3
-            mover_score = (abs(pct_change) * 0.4) + (min(rvol, 4.0) * 0.3) + (day_range_pct * 0.3)
+            # Intraday mover composite score. `momentum` used to be computed and then
+            # silently dropped from the score entirely — it's now included. Weights
+            # are a starting point (they sum to 1.0 across the four factors); tune
+            # them against a backtest rather than trusting them as-is.
+            mover_score = (
+                (abs(pct_change) * 0.35)
+                + (min(rvol, 4.0) * 0.25)
+                + (day_range_pct * 0.20)
+                + (abs(momentum) * 0.20)
+            )
 
             scored_stocks.append({
                 "symbol": sym,
@@ -386,6 +394,7 @@ def _sync_fetch_top_intraday_movers(date_str: Optional[str] = None, top_n: int =
                 "price_change_pct": round(pct_change, 2),
                 "relative_volume": round(rvol, 2),
                 "day_range_pct": round(day_range_pct, 2),
+                "momentum_pct": round(momentum, 2),
                 "volume": int(vol),
                 "mover_score": round(mover_score, 2),
             })

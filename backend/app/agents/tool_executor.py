@@ -1,10 +1,10 @@
-﻿import asyncio
+import asyncio
 import datetime
 import time
 import uuid
 
 from app.tools.registry import TOOLS
-from app.agents.state import ConversationState
+from app.agents.state import TradingGraphState
 from app.utils.logger import get_logger
 from app.db.base import AsyncSessionLocal
 from app.db.models import ActivePosition
@@ -164,7 +164,7 @@ async def execute_tool(step, tool_call_id: str):
         }
 
 
-async def tool_executor_node(state: ConversationState):
+async def tool_executor_node(state: TradingGraphState):
     steps = state.get("steps", [])
     active_pos_id = state.get("active_position_id")
     ticker = state.get("ticker")
