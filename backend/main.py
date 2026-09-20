@@ -6,7 +6,8 @@ Only the intentionally small public API surface is registered here.
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import ai_routes, market_routes, trading_routes
+# from app.api import ai_routes, market_routes, trading_routes
+from app.api.routes.market_analysis import router as market_analysis_router
 from app.config import settings
 # from app.db.base import init_db
 
@@ -29,10 +30,15 @@ app.add_middleware(
 # async def startup() -> None:
 #     await init_db()
 
+# app main / lifespan
+from app.services.position_monitor import scheduler
+scheduler.start()
 
 # app.include_router(trading_routes.router, prefix=settings.api_version_prefix)
 # app.include_router(ai_routes.router, prefix=settings.api_version_prefix)
-app.include_router(market_routes.router, prefix=settings.api_version_prefix)
+# app.include_router(market_routes.router, prefix=settings.api_version_prefix)
+app.include_router(market_analysis_router, prefix=settings.api_version_prefix)
+
 
 
 if __name__ == "__main__":

@@ -193,7 +193,7 @@ async def get_indian_indices_summary() -> List[Dict[str, Any]]:
     return await asyncio.to_thread(_sync_fetch_indices)
 
 
-def _sync_fetch_stock_market_data(ticker: str, period: str = "1mo", interval: str = "1d") -> Dict[str, Any]:
+def _sync_fetch_stock_market_data(ticker: str, period: str = "1mo", interval: str = "1d", include_fundamentals: bool = False) -> Dict[str, Any]:
     """Sync worker to fetch stock quotes, historical candles, and fundamentals."""
     t = yf.Ticker(ticker)
     info = {}

@@ -155,3 +155,12 @@ def get_security_master() -> list[dict]:
         {"symbol": symbol, **data}
         for symbol, data in sorted(_security_master.items())
     ]
+
+# wherever refresh_security_master() currently is
+# from app.services.security_master_index import security_index
+
+# async def refresh_security_master() -> int:
+#     raw_rows = await _fetch_security_master_from_dhan()  # your existing fetch logic
+#     _cache_security_master(raw_rows)                      # your existing cache set
+#     count = security_index.build(raw_rows)                # NEW: build the fuzzy index
+#     return count

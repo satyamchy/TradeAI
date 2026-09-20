@@ -1,41 +1,41 @@
-def build_context(
-    sources: list[dict]
-):
+# def build_context(
+#     sources: list[dict]
+# ):
 
-    if not sources:
-        return "No sources available."
+#     if not sources:
+#         return "No sources available."
 
-    docs = []
+#     docs = []
 
-    for idx, source in enumerate(
-        sources,
-        start=1,
-    ):
+#     for idx, source in enumerate(
+#         sources,
+#         start=1,
+#     ):
 
-        if source.get("source_type") == "structured_data":
-            data = source.get("data", {})
-            docs.append(
-                f"""
-Source {idx} (structured financial data via {source.get("tool")})
+#         if source.get("source_type") == "structured_data":
+#             data = source.get("data", {})
+#             docs.append(
+#                 f"""
+# Source {idx} (structured financial data via {source.get("tool")})
 
-{data}
-"""
-            )
-            continue
+# {data}
+# """
+#             )
+#             continue
 
-        docs.append(
-            f"""
-Source {idx}
+#         docs.append(
+#             f"""
+# Source {idx}
 
-Title:
-{source.get("title")}
+# Title:
+# {source.get("title")}
 
-URL:
-{source.get("url")}
+# URL:
+# {source.get("url")}
 
-Snippet:
-{source.get("snippet")}
-"""
-        )
+# Snippet:
+# {source.get("snippet")}
+# """
+#         )
 
-    return "\n".join(docs)
+#     return "\n".join(docs)
