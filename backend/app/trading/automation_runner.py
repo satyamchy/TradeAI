@@ -1,9 +1,12 @@
 """Market-hours loop for intraday entries and exits.
 
-The loop starts disabled. Enabling does not survive a process restart,
-so a crash cannot resume live entries by itself. Disable stops new
-entries. Open positions are still exited on take-profit, stop-loss, and
-the 15:15 IST square-off while the session is open.
+The production runner has no single account. It visits each trader whose
+automation state is entries or exits_only, and that state is stored on the
+user. Disable stops new entries. Open intraday positions are still exited
+on take-profit, stop-loss, and the 15:15 IST square-off.
+
+A runner built with one gateway is the test path. Its enable flag lives in
+memory and a new process starts with entries off.
 """
 
 from __future__ import annotations
@@ -12,7 +15,7 @@ import asyncio
 from collections import deque
 from datetime import datetime
 
-from app.broker.trading_gateway import TradingGateway, get_trading_gateway
+from app.broker.trading_gateway import TradingGateway
 from app.config import settings
 from app.trading.intraday_cycle import run_intraday_cycle
 from app.trading.nse_session import (
@@ -34,11 +37,13 @@ class AutomationRunner:
     """Owns the enable flag, the in-memory limits, and the recent cycle snapshots."""
 
     def __init__(self, gateway: TradingGateway | None = None):
-        self.gateway = gateway or get_trading_gateway()
+        self.gateway = gateway
         self.entries_enabled = False
         self.methods: list[str] = []
         self.limits = limits_from_settings()
         self.cycles: deque[dict] = deque(maxlen=CYCLE_HISTORY)
+        self.user_cycles: dict[int, deque] = {}
+        self.user_errors: dict[int, str] = {}
         self.last_error: str | None = None
         self._task: asyncio.Task | None = None
         self._stop = asyncio.Event()
@@ -47,7 +52,9 @@ class AutomationRunner:
         """Start the wait loop. Entries stay off until `enable` is called."""
         if self._task and not self._task.done():
             return
-        self._stop.clear()
+        # A new event each start. TestClient gives every test its own loop,
+        # and an Event cannot be waited on from a loop it was not created in.
+        self._stop = asyncio.Event()
         self._task = asyncio.create_task(self._loop())
         logger.info("Automation runner started. Entries are disabled.")
 
@@ -68,6 +75,8 @@ class AutomationRunner:
         when that value is already `live`. Any other mode except `paper`
         is refused. A restart clears this flag.
         """
+        if self.gateway is None:
+            raise RuntimeError("This runner has no single gateway. Automation is stored on each user.")
         if self.gateway.mode == "live" and settings.trading_mode.strip().lower() != "live":
             raise ValueError(
                 "Live automation is refused until TRADING_MODE=live is set in the environment."
@@ -185,13 +194,49 @@ class AutomationRunner:
         """Newest snapshots last, capped at 50."""
         return list(self.cycles)
 
+    async def run_enabled_traders(self, now: datetime | None = None) -> None:
+        """One pass per trader who turned entries on, or still has exits to manage."""
+        import json
+
+        from app import db
+        from app.broker.trading_gateway import gateway_for_user
+
+        moment = now or now_ist()
+        if not is_nse_cash_session_open(moment):
+            return
+        for user in db.traders_to_run():
+            gateway = gateway_for_user(user)
+            methods = json.loads(user["automation_methods"] or "[]")
+            entries_on = user["automation_state"] == "entries"
+            try:
+                snapshot = await run_intraday_cycle(
+                    gateway,
+                    entries_enabled=entries_on,
+                    methods=methods,
+                    limits=self.limits,
+                    now=moment,
+                )
+                self.user_cycles.setdefault(user["id"], deque(maxlen=CYCLE_HISTORY)).append(snapshot)
+                self.user_errors.pop(user["id"], None)
+                if not entries_on:
+                    still_open = await gateway.get_open_positions()
+                    intraday = [row for row in still_open if row.get("product_type", "INTRADAY") == "INTRADAY"]
+                    if not intraday:
+                        db.set_automation(user["id"], "off", "[]")
+            except Exception as exc:
+                self.user_errors[user["id"]] = str(exc)
+                logger.error("Intraday cycle failed for user %s: %s", user["id"], exc)
+
     async def _loop(self) -> None:
         while not self._stop.is_set():
             try:
-                await self.run_once()
-            except Exception:
-                # run_once already stored last_error. The next pass retries.
-                pass
+                if self.gateway is None:
+                    await self.run_enabled_traders()
+                else:
+                    await self.run_once()
+            except Exception as exc:
+                self.last_error = str(exc)
+                logger.error("Automation loop failed: %s", exc)
             try:
                 await asyncio.wait_for(self._stop.wait(), timeout=self.limits.cycle_interval_seconds)
             except asyncio.TimeoutError:

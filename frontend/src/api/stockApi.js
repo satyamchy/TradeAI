@@ -1,59 +1,125 @@
 import axios from 'axios';
 
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-
-const api = axios.create({
-  baseURL: BASE_URL,
-  headers: { 'Content-Type': 'application/json' },
-  timeout: 30000,
+const client = axios.create({
+  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8000',
+  withCredentials: true,
 });
 
-// ── Conversational AI Agent ───────────────────────────────────────────────────
-export const processConversation = (query, ticker) =>
-  api.post('/api/conversation', { query, ticker }).then(r => r.data);
+export function errorText(error) {
+  const detail = error?.response?.data?.detail;
+  return typeof detail === 'string' ? detail : 'Request failed';
+}
 
-// ── Market ────────────────────────────────────────────────────────────────────
-export const fetchMarketStatus  = () => api.get('/v1/market/status').then(r => r.data);
-export const fetchMarketIndices = () => api.get('/v1/market/indices').then(r => r.data);
+export async function login(username, password) {
+  const { data } = await client.post('/api/v1/auth/login', { username, password });
+  return data.user;
+}
 
-// ── Data & AI Analysis ────────────────────────────────────────────────────────
-export const fetchGlobalMacro      = ()                          => api.get('/v1/data/global-macro').then(r => r.data);
-export const fetchIntervalData     = (ticker, timeframe = '15m') => api.get(`/v1/data/interval-data/${ticker}`, { params: { timeframe } }).then(r => r.data);
-export const runDeepAnalysis       = (ticker, date_str, trade_mode = 'INTRADAY') => api.post('/v1/data/deep-analysis', null, { params: { ticker, date_str, trade_mode } }).then(r => r.data);
-export const fetchPositionMonitor  = ()                          => api.get('/v1/data/position-monitor').then(r => r.data);
+export async function logout() {
+  await client.post('/api/v1/auth/logout');
+}
 
-// ── Stock Screener & Batch Analysis ───────────────────────────────────────────
-export const analyzeStocks = (payload) => api.post('/api/v1/stocks/analyze', payload).then(r => r.data);
+export async function session() {
+  const { data } = await client.get('/api/v1/auth/session');
+  return data.user;
+}
 
-// ── Analysis Snapshots & History ──────────────────────────────────────────────
-export const fetchTodaysAnalysis   = (ticker)        => api.get('/v1/analysis/today', { params: ticker ? { ticker } : {} }).then(r => r.data);
-export const fetchPredictionByDate = (date, ticker)  => api.get('/v1/analysis/prediction', { params: ticker ? { date, ticker } : { date } }).then(r => r.data);
-export const logAnalysisSnapshot   = (payload)       => api.post('/v1/analysis/log', payload).then(r => r.data);
-export const fetchPerformanceHistory = (ticker)      => api.get(`/v1/snapshots/${ticker}/performance`).then(r => r.data);
+export async function automationStatus() {
+  const { data } = await client.get('/api/v1/automation/status');
+  return data;
+}
 
-// ── Trades & Journal ──────────────────────────────────────────────────────────
-export const fetchTrades       = (params)   => api.get('/v1/trades/', { params }).then(r => r.data);
-export const createTrade       = (payload)  => api.post('/v1/trades/', payload).then(r => r.data);
-export const updateTrade       = (id, data) => api.put(`/v1/trades/${id}`, data).then(r => r.data);
-export const deleteTrade       = (id)       => api.delete(`/v1/trades/${id}`).then(r => r.data);
-export const fetchTradeSummary = ()         => api.get('/v1/trades/summary').then(r => r.data);
+export async function enableAutomation(methods) {
+  const { data } = await client.post('/api/v1/automation/enable', { methods });
+  return data;
+}
 
-// ── Trading & Guardrails (DhanHQ / Paper) ─────────────────────────────────────
-export const fetchGuardrailStatus = ()         => api.get('/v1/trading/guardrails/status').then(r => r.data);
-export const toggleTrading        = (enabled)  => api.post('/v1/trading/guardrails/toggle', { is_trading_enabled: enabled }).then(r => r.data);
-export const placeOrder           = (payload)  => api.post('/v1/trading/orders', payload).then(r => r.data);
-export const squareOffPosition    = (id, data) => api.post(`/v1/trading/square-off/${id}`, data).then(r => r.data);
-// ── DhanHQ Holdings (Read-Only GET Routes) ──────────────────────────────────
-export const fetchHoldings        = ()         => api.get('/v1/holdings').then(r => r.data);
-export const fetchHoldingDetail   = (symbol)   => api.get(`/v1/holdings/${symbol}`).then(r => r.data);
+export async function disableAutomation() {
+  const { data } = await client.post('/api/v1/automation/disable');
+  return data;
+}
 
+export async function squareOff() {
+  const { data } = await client.post('/api/v1/automation/square-off-open-positions');
+  return data;
+}
 
+export async function funds() {
+  const { data } = await client.get('/api/v1/account/funds');
+  return data;
+}
 
-// ── Scheduled Jobs & Cron ─────────────────────────────────────────────────────
-export const fetchJobs    = ()        => api.get('/v1/jobs/').then(r => r.data);
-export const createJob    = (payload) => api.post('/v1/jobs/', payload).then(r => r.data);
-export const triggerJob   = (id)      => api.post(`/v1/jobs/${id}/run`).then(r => r.data);
-export const deleteJob    = (id)      => api.delete(`/v1/jobs/${id}`).then(r => r.data);
-export const fetchJobLogs = (job_id)  => api.get('/v1/jobs/logs', { params: job_id ? { job_id } : {} }).then(r => r.data);
+export async function positions() {
+  const { data } = await client.get('/api/v1/account/positions');
+  return data;
+}
 
-export default api;
+export async function saveDhanCredentials(clientId, accessToken) {
+  const { data } = await client.put('/api/v1/account/dhan-credentials', {
+    client_id: clientId,
+    access_token: accessToken,
+  });
+  return data;
+}
+
+export async function pendingOrders() {
+  const { data } = await client.get('/api/v1/orders/pending');
+  return data.orders;
+}
+
+export async function requestSuggestion() {
+  const { data } = await client.post('/api/v1/suggestions');
+  return data;
+}
+
+export async function requestDelivery(symbol, side, quantity) {
+  const { data } = await client.post('/api/v1/orders/delivery', { symbol, side, quantity });
+  return data;
+}
+
+export async function placeIntraday(symbol, side, quantity) {
+  const { data } = await client.post('/api/v1/orders/intraday', { symbol, side, quantity });
+  return data;
+}
+
+export async function executePending(id) {
+  const { data } = await client.post(`/api/v1/orders/pending/${id}/execute`);
+  return data;
+}
+
+export async function rejectPending(id) {
+  const { data } = await client.post(`/api/v1/orders/pending/${id}/reject`);
+  return data;
+}
+
+export async function events(userId) {
+  const { data } = await client.get('/api/v1/events', {
+    params: userId ? { user_id: userId } : {},
+  });
+  return data.events;
+}
+
+export async function users() {
+  const { data } = await client.get('/api/v1/users');
+  return data.users;
+}
+
+export async function createUser(body) {
+  const { data } = await client.post('/api/v1/users', body);
+  return data;
+}
+
+export async function updateUser(id, body) {
+  const { data } = await client.patch(`/api/v1/users/${id}`, body);
+  return data;
+}
+
+export async function automationSettings() {
+  const { data } = await client.get('/api/v1/automation/settings');
+  return data;
+}
+
+export async function patchAutomationSettings(body) {
+  const { data } = await client.patch('/api/v1/automation/settings', body);
+  return data;
+}

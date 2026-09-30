@@ -53,6 +53,7 @@ def check_new_entry(
     past_entry_cutoff: bool,
     square_off_due: bool,
     daily_loss_halt: bool,
+    product_type: str = "INTRADAY",
 ) -> str | None:
     """Return a rejection reason, or None when the entry may be sent.
 
@@ -61,13 +62,13 @@ def check_new_entry(
     """
     if not session_open:
         return "NSE cash session is closed"
-    if square_off_due:
+    if product_type == "INTRADAY" and square_off_due:
         return "square-off time has passed"
-    if past_entry_cutoff:
+    if product_type == "INTRADAY" and past_entry_cutoff:
         return "new entries stop at 14:45 IST"
     if daily_loss_halt:
         return "daily loss limit is hit"
-    if open_position_count >= limits.max_positions:
+    if product_type == "INTRADAY" and open_position_count >= limits.max_positions:
         return "max open positions is reached"
     if not is_nifty50_symbol(symbol):
         return "symbol is not in the NIFTY 50 list"

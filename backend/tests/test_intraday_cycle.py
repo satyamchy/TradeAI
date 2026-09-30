@@ -96,7 +96,7 @@ def _forbid_live_orders(monkeypatch):
     async def place(*args, **kwargs):
         raise AssertionError("a live Dhan order was sent")
 
-    monkeypatch.setattr(dhan_gateway, "place_intraday_market_order", place)
+    monkeypatch.setattr(dhan_gateway, "place_market_order", place)
 
 
 def test_session_clock():
@@ -212,11 +212,21 @@ def test_entry_cutoff_blocks_new_orders(tmp_path, monkeypatch):
     asyncio.run(scenario())
 
 
-def test_enable_route_stays_off_until_called():
+def test_enable_route_stays_off_until_called(tmp_path, monkeypatch):
+    from app import db
+    from app.auth import hash_password
     from app.config import settings
     from main import app
 
+    monkeypatch.setattr(settings, "database_path", str(tmp_path / "tradex.db"))
+    db.init_db()
+    db.create_user("trader1", hash_password("password1"), "trader")
+
     with TestClient(app) as client:
+        logged_out = client.get("/api/v1/automation/status")
+        assert logged_out.status_code == 401
+        login = client.post("/api/v1/auth/login", json={"username": "trader1", "password": "password1"})
+        assert login.status_code == 200
         status = client.get("/api/v1/automation/status")
         assert status.status_code == 200
         assert status.json()["enabled"] is False

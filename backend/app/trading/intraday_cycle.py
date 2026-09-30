@@ -52,6 +52,7 @@ async def run_intraday_cycle(
     square_off_due = force_square_off or (session_open and is_square_off_time(moment))
 
     positions = await gateway.get_open_positions()
+    positions = [row for row in positions if row.get("product_type", "INTRADAY") == "INTRADAY"]
     realized = await gateway.realized_pnl_today_inr()
     loss_halt = daily_loss_halt(realized, limits.max_daily_loss_inr)
     if loss_halt:

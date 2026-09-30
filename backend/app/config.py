@@ -24,10 +24,20 @@ class Settings(BaseSettings):
     dhan_client_id: str = ""
     dhan_access_token: str = ""
 
+    session_secret: str = "dev-session-secret-change-me"
+    credentials_key: str = ""
+    admin_username: str = "admin"
+    admin_password: str = ""
+    database_path: str = "tradex.db"
+    frontend_origin: str = "http://localhost:5173"
+    groq_api_key: str = ""
+    groq_model: str = "llama-3.3-70b-versatile"
+
     # paper keeps orders off the exchange. live sends them through the DhanHQ SDK.
     trading_mode: str = "paper"
     paper_starting_balance_inr: float = 100_000.0
     paper_ledger_path: str = "paper_ledger.json"
+    paper_ledger_dir: str = "paper_ledgers"
 
     max_positions: int = 4
     capital_per_trade_pct: float = 0.20

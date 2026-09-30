@@ -20,6 +20,7 @@ logs/
 
 # Paper trading ledger and the Dhan scrip master download
 paper_ledger.json
+paper_ledgers/
 security_id_list.csv
 
 # pip install -r requirements.txt

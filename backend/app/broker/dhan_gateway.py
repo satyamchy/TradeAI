@@ -45,10 +45,15 @@ def _sdk_client() -> dhanhq:
     return dhanhq(settings.dhan_client_id, settings.dhan_access_token)
 
 
-async def _call(method_name: str, *args: Any, **kwargs: Any) -> Any:
-    """Run one blocking SDK method off the event loop and reject failure payloads."""
+async def _call(method_name: str, *args: Any, creds: tuple[str, str] | None = None, **kwargs: Any) -> Any:
+    """Run one blocking SDK method off the event loop and reject failure payloads.
+
+    `creds` is (client_id, access_token) for one user. Without it, the
+    process-level Dhan settings are used for market data.
+    """
     try:
-        method = getattr(_sdk_client(), method_name)
+        client = dhanhq(creds[0], creds[1]) if creds else _sdk_client()
+        method = getattr(client, method_name)
         response = await run_in_threadpool(method, *args, **kwargs)
     except DhanRequestError:
         raise
@@ -75,9 +80,9 @@ def _first(row: dict, *keys: str, default: Any = None) -> Any:
     return default
 
 
-async def get_available_balance_inr() -> float:
+async def get_available_balance_inr(creds: tuple[str, str] | None = None) -> float:
     """Spendable cash in INR from the Dhan fund-limit endpoint."""
-    payload = _payload(await _call("get_fund_limits"))
+    payload = _payload(await _call("get_fund_limits", creds=creds))
     if not isinstance(payload, dict):
         raise DhanRequestError("DhanHQ fund limits did not return an object.")
     # Dhan's payload spells this field 'availabelBalance'.
@@ -85,14 +90,14 @@ async def get_available_balance_inr() -> float:
     return float(raw or 0)
 
 
-async def get_intraday_positions() -> list[dict]:
+async def get_intraday_positions(creds: tuple[str, str] | None = None) -> list[dict]:
     """Open NSE intraday positions.
 
     Quantity is signed: positive is long, negative is short. Delivery
     positions are left out so this loop cannot flatten holdings it did
     not open as MIS.
     """
-    payload = _payload(await _call("get_positions"))
+    payload = _payload(await _call("get_positions", creds=creds))
     rows = payload if isinstance(payload, list) else []
     positions = []
     for row in rows:
@@ -119,13 +124,13 @@ async def get_intraday_positions() -> list[dict]:
     return positions
 
 
-async def get_realized_pnl_today_inr() -> float:
+async def get_realized_pnl_today_inr(creds: tuple[str, str] | None = None) -> float:
     """Realized intraday profit still reported by Dhan, in INR.
 
     Flat rows are included. A squared-off loss has net quantity zero, and
     dropping those rows would hide it from the daily loss halt.
     """
-    payload = _payload(await _call("get_positions"))
+    payload = _payload(await _call("get_positions", creds=creds))
     rows = payload if isinstance(payload, list) else []
     total = 0.0
     for row in rows:
@@ -139,9 +144,9 @@ def _is_intraday(row: dict) -> bool:
     return product in {"INTRADAY", "INTRA", "MIS"}
 
 
-async def get_orders() -> list[dict]:
+async def get_orders(creds: tuple[str, str] | None = None) -> list[dict]:
     """Today's Dhan orders, newest fields kept in a stable shape."""
-    payload = _payload(await _call("get_order_list"))
+    payload = _payload(await _call("get_order_list", creds=creds))
     rows = payload if isinstance(payload, list) else []
     orders = []
     for row in rows:
@@ -162,22 +167,30 @@ async def get_orders() -> list[dict]:
     return orders
 
 
-async def cancel_order(order_id: str) -> dict:
+async def cancel_order(order_id: str, creds: tuple[str, str] | None = None) -> dict:
     """Ask Dhan to cancel one working order. Filled orders cannot be cancelled."""
-    response = await _call("cancel_order", order_id)
+    response = await _call("cancel_order", order_id, creds=creds)
     return {"order_id": order_id, "broker": "dhan", "response": response}
 
 
-async def place_intraday_market_order(
+async def place_market_order(
     security_id: str,
     side: str,
     quantity: int,
+    product_type: str = "INTRADAY",
+    creds: tuple[str, str] | None = None,
 ) -> dict:
-    """Place one NSE intraday market order. `side` is BUY or SELL. Quantity is shares."""
+    """Place one NSE market order. `product_type` is INTRADAY or DELIVERY.
+
+    Quantity is shares. DELIVERY is CNC. The caller has already decided
+    this order should be sent.
+    """
     if side not in {"BUY", "SELL"}:
         raise DhanRequestError("side must be BUY or SELL")
     if quantity <= 0:
         raise DhanRequestError("quantity must be greater than 0")
+    if product_type not in {"INTRADAY", "DELIVERY"}:
+        raise DhanRequestError("product_type must be INTRADAY or DELIVERY")
 
     response = await _call(
         "place_order",
@@ -186,8 +199,9 @@ async def place_intraday_market_order(
         transaction_type=BUY if side == "BUY" else SELL,
         quantity=int(quantity),
         order_type=MARKET,
-        product_type=INTRADAY,
+        product_type=INTRADAY if product_type == "INTRADAY" else dhanhq.CNC,
         price=0,
+        creds=creds,
     )
     payload = _payload(response)
     order_id = ""

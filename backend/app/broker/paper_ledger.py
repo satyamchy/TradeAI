@@ -37,7 +37,11 @@ class PaperLedger:
     def open_positions(self) -> list[dict]:
         """Open paper positions. Quantity is signed shares."""
         rows = []
-        for symbol, position in self._state["positions"].items():
+        for key, position in self._state["positions"].items():
+            symbol, _, product = key.partition("#")
+            if not product:
+                symbol = key
+                product = position.get("product_type", "INTRADAY")
             rows.append(
                 {
                     "symbol": symbol,
@@ -46,7 +50,7 @@ class PaperLedger:
                     "average_price": float(position["average_price"]),
                     "last_price": float(position["last_price"]),
                     "realized_pnl_inr": 0.0,
-                    "product_type": "INTRADAY",
+                    "product_type": product,
                 }
             )
         return rows
@@ -74,6 +78,7 @@ class PaperLedger:
         side: str,
         quantity: int,
         price: float,
+        product_type: str = "INTRADAY",
     ) -> dict:
         """Fill a market order immediately at `price` INR per share.
 
@@ -88,7 +93,8 @@ class PaperLedger:
             raise PaperLedgerError("price must be greater than 0")
 
         signed_quantity = quantity if side == "BUY" else -quantity
-        self._apply_fill(symbol, security_id, signed_quantity, float(price))
+        key = symbol if product_type == "INTRADAY" else f"{symbol}#{product_type}"
+        self._apply_fill(key, security_id, signed_quantity, float(price), product_type)
         order = {
             "order_id": f"paper-{self._state['next_order_id']}",
             "symbol": symbol,
@@ -96,7 +102,7 @@ class PaperLedger:
             "quantity": quantity,
             "price": float(price),
             "status": "FILLED",
-            "product_type": "INTRADAY",
+            "product_type": product_type,
             "broker": "paper",
         }
         self._state["next_order_id"] += 1
@@ -114,7 +120,7 @@ class PaperLedger:
             "reason": "Paper market orders fill immediately and cannot be cancelled.",
         }
 
-    def _apply_fill(self, symbol: str, security_id: str, signed_quantity: int, price: float) -> None:
+    def _apply_fill(self, symbol: str, security_id: str, signed_quantity: int, price: float, product_type: str = "INTRADAY") -> None:
         position = self._state["positions"].get(symbol)
         quantity = int(position["quantity"]) if position else 0
         average = float(position["average_price"]) if position else 0.0
@@ -130,6 +136,7 @@ class PaperLedger:
                 "quantity": quantity + signed_quantity,
                 "average_price": new_average,
                 "last_price": price,
+                "product_type": product_type,
             }
             return
 
