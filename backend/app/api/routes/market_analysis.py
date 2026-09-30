@@ -6,7 +6,7 @@ from app.services.llm_stock_analysis import analyze_stock_data
 
 from app.schemas.finance.recommendation import RecommendRequest, RecommendResponse, TradeRecommendation, ExecutionResult
 from app.services.llm_trade_recommender import generate_trade_recommendation, RecommendationError
-from app.services.order_execution_service import execute_recommendation
+# from app.services.order_execution_service import execute_recommendation
 
 router = APIRouter(prefix="/market/data", tags=["market-analysis"])
 
@@ -55,6 +55,7 @@ async def recommend(req: RecommendRequest):
 
     try:
         rec = await generate_trade_recommendation(ticker, market_data)
+        print(f"Trade recommendation for {ticker}: {rec}")
     except RecommendationError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 

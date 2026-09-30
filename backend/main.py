@@ -31,8 +31,8 @@ app.add_middleware(
 #     await init_db()
 
 # app main / lifespan
-from app.services.position_monitor import scheduler
-scheduler.start()
+# from app.services.position_monitor import scheduler
+# scheduler.start()
 
 # app.include_router(trading_routes.router, prefix=settings.api_version_prefix)
 # app.include_router(ai_routes.router, prefix=settings.api_version_prefix)

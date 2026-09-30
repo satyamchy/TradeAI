@@ -1,5 +1,7 @@
 import json
 import httpx
+from app.integrations.llm.groq_client import get_llm
+from langchain_core.messages import SystemMessage, HumanMessage
 
 _SYSTEM_PROMPT = """You are a cautious Indian equity (NSE) trade-decision assistant.
 Given quote, fundamentals, and recent price history for one stock, decide:
@@ -35,21 +37,29 @@ async def generate_trade_recommendation(ticker: str, market_data: dict) -> dict:
         f"Recent history (last 10 sessions): {recent_history}\n"
     )
 
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        response = await client.post(
-            "https://api.anthropic.com/v1/messages",
-            headers={"Content-Type": "application/json"},
-            json={
-                "model": "claude-sonnet-4-6",
-                "max_tokens": 500,
-                "system": _SYSTEM_PROMPT,
-                "messages": [{"role": "user", "content": user_content}],
-            },
-        )
-        response.raise_for_status()
-        data = response.json()
+    # async with httpx.AsyncClient(timeout=30.0) as client:
+    #     response = await client.post(
+    #         "https://api.anthropic.com/v1/messages",
+    #         headers={"Content-Type": "application/json"},
+    #         json={
+    #             "model": "claude-sonnet-4-6",
+    #             "max_tokens": 500,
+    #             "system": _SYSTEM_PROMPT,
+    #             "messages": [{"role": "user", "content": user_content}],
+    #         },
+    #     )
+    #     response.raise_for_status()
+    #     data = response.json()
+    llm = get_llm()
+        
+    response = await llm.ainvoke([
+        SystemMessage(content=_SYSTEM_PROMPT),
+        HumanMessage(content=user_content),
+    ])
+       
+    # return response.content.strip()  
+    text  = response.content.strip()
 
-    text = "".join(b.get("text", "") for b in data.get("content", []) if b.get("type") == "text")
     text = text.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
 
     try:
