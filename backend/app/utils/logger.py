@@ -1,35 +1,26 @@
-import datetime
+"""Rotating file and console log. This module does not write to a database."""
+
 import logging
 import os
 from logging.handlers import RotatingFileHandler
-from typing import Optional
-
-from app.db.base import AsyncSessionLocal
-from app.db.models import EventLog
 
 LOG_DIR = "logs"
 os.makedirs(LOG_DIR, exist_ok=True)
-
-LOG_FILE = os.path.join(LOG_DIR, "agent.log")
+LOG_FILE = os.path.join(LOG_DIR, "tradex.log")
 
 
 def get_logger(name: str) -> logging.Logger:
+    """Return a logger that writes to the console and to logs/tradex.log."""
     logger = logging.getLogger(name)
-
     if logger.handlers:
         return logger
 
     logger.setLevel(logging.INFO)
+    formatter = logging.Formatter("%(asctime)s | %(levelname)s | %(name)s | %(message)s")
 
-    formatter = logging.Formatter(
-        "%(asctime)s | %(levelname)s | %(name)s | %(message)s"
-    )
-
-    # Terminal
     console_handler = logging.StreamHandler()
     console_handler.setFormatter(formatter)
 
-    # File
     file_handler = RotatingFileHandler(
         LOG_FILE,
         maxBytes=5 * 1024 * 1024,
@@ -41,70 +32,4 @@ def get_logger(name: str) -> logging.Logger:
     logger.addHandler(console_handler)
     logger.addHandler(file_handler)
     logger.propagate = False
-
     return logger
-
-
-logger = get_logger("agent_event")
-
-
-async def log_agent_event(
-    agent_name: str,
-    message: str,
-    ticker: Optional[str] = None,
-    status: str = "INFO",
-):
-    """
-    Formats system runs with an active timestamp, target ticker, agent component,
-    and statement block. Securely persists metadata inside the database 'event_logs' table
-    within an isolated async session block.
-    """
-    timestamp = datetime.datetime.utcnow()
-    ticker_display = ticker if ticker else "N/A"
-
-    # Formatted statement block
-    formatted_statement = (
-        f"[{timestamp.isoformat()} UTC] AGENT: {agent_name} | "
-        f"TICKER: {ticker_display} | STATUS: {status} | {message}"
-    )
-
-    # Print / File log
-    if status.upper() in ("ERROR", "FAILED"):
-        logger.error(formatted_statement)
-    elif status.upper() == "WARNING":
-        logger.warning(formatted_statement)
-    else:
-        logger.info(formatted_statement)
-
-    # Isolated async session block inside database
-    try:
-        async with AsyncSessionLocal() as session:
-            log_entry = EventLog(
-                timestamp=timestamp,
-                agent_name=agent_name,
-                ticker=ticker,
-                status=status,
-                message=message,
-            )
-            session.add(log_entry)
-            await session.commit()
-    except Exception as exc:
-        logger.warning("FAILED_TO_PERSIST_EVENT_LOG | error=%s", exc)
-
-
-def get_agent_logger(agent_name: str):
-    """
-    Returns an async log(...) callable pre-bound to a single agent_name, so call
-    sites don't have to repeat `agent_name="X"` on every single event:
-
-        log = get_agent_logger("WatchdogService")
-        await log("Starting cycle.")
-        await log(f"Failed on {ticker}: {err}", ticker=ticker, status="ERROR")
-
-    Equivalent to calling log_agent_event(agent_name=agent_name, ...) directly.
-    """
-
-    async def _log(message: str, ticker: Optional[str] = None, status: str = "INFO"):
-        await log_agent_event(agent_name=agent_name, message=message, ticker=ticker, status=status)
-
-    return _log

@@ -18,6 +18,10 @@ env/
 logs/
 *.log
 
+# Paper trading ledger and the Dhan scrip master download
+paper_ledger.json
+security_id_list.csv
+
 # pip install -r requirements.txt
 # python -m venv myenv
 #  .\myenv\Scripts\activate

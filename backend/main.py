@@ -1,20 +1,35 @@
-"""TradeAI API entrypoint.
+"""TradeX API entrypoint.
 
-Only the intentionally small public API surface is registered here.
+The mounted routes are the intraday automation loop, account reads,
+the NIFTY 50 screener, and one-off intraday orders.
 """
+
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-# from app.api import ai_routes, market_routes, trading_routes
-from app.api.routes.market_analysis import router as market_analysis_router
+from app.api.account import router as account_router
+from app.api.automation import router as automation_router
+from app.api.manual_orders import router as manual_orders_router
+from app.api.screener import router as screener_router
 from app.config import settings
-# from app.db.base import init_db
+from app.trading.automation_runner import automation_runner
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Entries stay off until the enable route is called. A restart does not resume them.
+    await automation_runner.start()
+    yield
+    await automation_runner.stop()
+
 
 app = FastAPI(
     title="TradeX API",
     version="3.0.0",
     debug=settings.app_debug,
+    lifespan=lifespan,
 )
 
 app.add_middleware(
@@ -25,24 +40,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
-# @app.on_event("startup")
-# async def startup() -> None:
-#     await init_db()
-
-# app main / lifespan
-# from app.services.position_monitor import scheduler
-# scheduler.start()
-
-# app.include_router(trading_routes.router, prefix=settings.api_version_prefix)
-# app.include_router(ai_routes.router, prefix=settings.api_version_prefix)
-# app.include_router(market_routes.router, prefix=settings.api_version_prefix)
-app.include_router(market_analysis_router, prefix=settings.api_version_prefix)
-
+app.include_router(automation_router, prefix=settings.api_version_prefix)
+app.include_router(account_router, prefix=settings.api_version_prefix)
+app.include_router(screener_router, prefix=settings.api_version_prefix)
+app.include_router(manual_orders_router, prefix=settings.api_version_prefix)
 
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(
         "main:app",
         host=settings.backend_host,

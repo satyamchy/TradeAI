@@ -1,34 +1,43 @@
-"""Application settings loaded from environment / .env."""
+"""Environment settings.
+
+Trading limits that the operator can change while the process is running
+live on the automation runner, not here. Values in this module are the
+defaults loaded at startup.
+"""
 
 from functools import lru_cache
-from pydantic_settings import BaseSettings, SettingsConfigDict
+
 from dotenv import load_dotenv
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 load_dotenv()
 
 
 class Settings(BaseSettings):
+    """Process configuration. Unknown environment keys are ignored."""
+
     app_name: str = "TradeX"
     app_env: str = "development"
     app_debug: bool = True
     api_version_prefix: str = "/api/v1"
 
-    # PostgreSQL / Supabase. Keep credentials in .env, never in source code.
-    database_url: str = ""
-
-    # DhanHQ
-    dhan_api_url: str = "https://api.dhan.co/v2"
     dhan_client_id: str = ""
     dhan_access_token: str = ""
-    dhan_app_id: str = ""
-    dhan_app_secret: str = ""
-    dhan_pin: str = ""
-    dhan_totp_secret: str = ""
 
-    # LLM
-    groq_api_key: str = ""
+    # paper keeps orders off the exchange. live sends them through the DhanHQ SDK.
+    trading_mode: str = "paper"
+    paper_starting_balance_inr: float = 100_000.0
+    paper_ledger_path: str = "paper_ledger.json"
 
-    # Server
+    max_positions: int = 4
+    capital_per_trade_pct: float = 0.20
+    cash_reserve_pct: float = 0.10
+    take_profit_pct: float = 1.5
+    stop_loss_pct: float = 1.0
+    max_daily_loss_inr: float = 2_000.0
+    cycle_interval_seconds: int = 180
+    screener_limit: int = 6
+
     backend_host: str = "0.0.0.0"
     backend_port: int = 8000
 
@@ -41,6 +50,7 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
+    """Return the cached settings object."""
     return Settings()
 
 
