@@ -70,7 +70,7 @@ The same process flattens intraday positions from 15:15 IST while the NSE cash s
 
 1. Boot once in `paper` and sign in as the admin created from `ADMIN_PASSWORD`.
 2. Create a trader. An admin cannot place orders.
-3. On that trader, save the Dhan client id and access token. Live orders refuse to run without that pair.
+3. On that trader, save the Dhan client id and a token generated on Dhan Web. Whitelist this host's static IP on that Dhan account first. The steps are in [docs/PROJECT_SETUP.md](docs/PROJECT_SETUP.md). Live orders refuse to run without that pair.
 4. Set a small daily-loss cap on Settings.
 5. Switch `TRADING_MODE=live` and restart the one API process.
 6. Confirm the desk shows a live banner, cash, and positions from that Dhan account.

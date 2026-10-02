@@ -1,6 +1,6 @@
 # TradeX project setup
 
-Python 3.11 or newer, and Node.js with npm. Two processes: the API on port 8000 and the desk on port 5173.
+Python 3.11 or newer, and Node.js with npm. Two processes: the API on port 8000 and the desk on port 5173. DhanHQ account, token, and static IP setup is in [DhanHQ](#dhanhq) below.
 
 ## 1. Backend
 
@@ -140,3 +140,42 @@ Use `DATABASE_PATH`, `DHAN_CLIENT_ID`, and `DHAN_ACCESS_TOKEN` instead.
 - **viewer** can read their own desk and log. They cannot enable automation, place an order, or approve one.
 
 Sign in as the admin, create a trader from Users, then use that trader for orders.
+
+## DhanHQ
+
+TradeX uses [DhanHQ v2](https://dhanhq.co/docs/v2/authentication/). It needs two values from a Dhan account: the client id, and an access token generated on Dhan Web. That is the only login this process implements. An API key, API secret, PIN, or TOTP is not read. `DHAN_APP_ID`, `DHAN_APP_SECRET`, `DHAN_PIN`, and `DHAN_TOTP_SECRET` do nothing.
+
+A token from the API-key consent flow cannot be renewed by this process. Generate the token on Dhan Web so [RenewToken](https://dhanhq.co/docs/v2/authentication/) applies.
+
+### 1. On Dhan Web
+
+1. Sign in at [web.dhan.co](https://web.dhan.co).
+2. Open My Profile, then Access DhanHQ APIs. Dhan's support pages call the same screen Get Trading & Data APIs.
+3. Copy the client id shown there. That is `dhanClientId`. It is not the UCC.
+4. Generate an access token. Leave the postback URL empty. This desk polls order status. It does not receive postbacks. The token is valid for 24 hours.
+5. Whitelist the public IP of the machine that will run `python main.py`. On that same page, add the IP and save. Dhan requires a static IP for placing, modifying, and cancelling orders. Quotes, funds, and order status do not. A home connection whose address changes will fail at the order, not at login. Each Dhan account needs its own IP, and Dhan will not let you change a saved IP for 7 days.
+
+Trading APIs are included with a Dhan account. The 15-minute candles used to refine a rank are a Data API, which Dhan bills separately. With no candle data, the rank stays on the NSE percent-change snapshot. Order prices still come from a quote.
+
+### 2. Two places the token can sit
+
+Set `CREDENTIALS_KEY` before either save. The desk encrypts a trader token with that key. An empty key makes the Settings save fail.
+
+| Where | Who | What it is allowed to do |
+| --- | --- | --- |
+| `DHAN_CLIENT_ID` and `DHAN_ACCESS_TOKEN` in `backend/.env` | The process | Download the security master when a trader has not saved a token yet. Restart after you change these. |
+| Settings, Client id and Access token | That trader | Live funds, quotes, positions, holdings, and orders. A live order with no saved pair is refused. It is not sent on the process token. |
+
+An admin has no Dhan form. Sign in as the trader, open Settings, paste the client id and the access token, and save. Saving again replaces the pair. The token is not shown back and is not written to the event log.
+
+Paper mode still fills inside this process. With a token saved, those fills are priced from Dhan quotes. Live mode sends the order to that trader's Dhan account. `TRADING_MODE` changes only after a restart.
+
+### 3. After it is saved
+
+Leave the API process running. It calls RenewToken while the current token is still valid: in the last four hours of a token that carries an expiry, or 20 hours after a save when it does not. Dhan invalidates the old token when the new one is issued. The new value is stored encrypted.
+
+Renewal does not run when the process is stopped, and it cannot revive a token that has already expired. Paste a new web token on Settings in that case.
+
+Confirm the pair before `TRADING_MODE=live`. On the trader's desk, funds and positions should be that Dhan account's. A 400 on those calls means the pair was not saved. A 502 means Dhan rejected the call.
+
+Orders this desk sends are NSE equity, product `INTRADAY` or `CNC`, as a market order. A live fill also parks a stop-market at Dhan. The static IP whitelist is what lets those order calls through.

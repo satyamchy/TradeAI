@@ -1,7 +1,7 @@
 """Rank NIFTY 50 names for an intraday long or an intraday short.
 
-The screener does not place orders. Live candles come from the DhanHQ
-gateway. In paper mode, yfinance is the fallback when Dhan has no bars.
+The screener does not place orders. Rank order comes from the NSE
+snapshot. Dhan session candles refine a name when they are available.
 """
 
 from __future__ import annotations

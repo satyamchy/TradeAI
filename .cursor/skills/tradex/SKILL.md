@@ -35,6 +35,7 @@ Checks, from `backend`: `python -m pytest tests -q`.
 
 - `TRADING_MODE` is fixed for the life of the process. Changing it requires a restart. Enabling automation does not switch paper to live.
 - An admin does not place orders. Only a trader can. A delivery request and a model suggestion stay pending until that trader calls execute. A typed intraday order is sent on that request. One pending row can be claimed once.
+- DhanHQ setup is the DhanHQ section of [docs/PROJECT_SETUP.md](../../../docs/PROJECT_SETUP.md): a client id and a token generated on Dhan Web, plus that host's static IP on the Dhan account. API key, secret, PIN, and TOTP are not read.
 - Live funds, quotes, positions, holdings, and orders use the trader's own Dhan pair from Settings. The process-level `DHAN_CLIENT_ID` and `DHAN_ACCESS_TOKEN` are a fallback for the security master only. A live order is refused when that trader has no saved token.
 - A Dhan access token expires after 24 hours. While the process is running, `backend/app/broker/dhan_token.py` renews it before expiry and stores the new ciphertext. A stopped process cannot renew a dead token.
 - Order prices come from the Dhan quote. NSE public JSON supplies the holiday calendar, the index constituents, and the rank. yfinance is not on the order path.
