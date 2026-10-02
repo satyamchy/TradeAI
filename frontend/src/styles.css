@@ -83,6 +83,15 @@ button { border: 0; border-radius: 8px; padding: 10px 14px; cursor: pointer; }
 .log { padding: 14px 0; border-bottom: 1px solid var(--line); }
 .inline { display: flex; gap: 8px; align-items: center; }
 .inline input { width: 120px; }
+.banner {
+  background: #3a1408;
+  color: #ffb088;
+  border: 1px solid var(--orange);
+  border-radius: 10px;
+  padding: 10px 14px;
+  margin-bottom: 16px;
+}
+.check { display: flex; align-items: center; gap: 8px; }
 
 @media (max-width: 800px) {
   .app { grid-template-columns: 1fr; }

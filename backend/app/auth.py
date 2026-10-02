@@ -97,4 +97,5 @@ def public_user(user: dict) -> dict:
         "dhan_saved": user["dhan_saved"],
         "automation_state": user["automation_state"],
         "automation_methods": user["automation_methods"],
+        "trading_index": user.get("trading_index") or "NIFTY 50",
     }

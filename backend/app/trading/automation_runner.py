@@ -49,7 +49,13 @@ class AutomationRunner:
         self._stop = asyncio.Event()
 
     async def start(self) -> None:
-        """Start the wait loop. Entries stay off until `enable` is called."""
+        """Start the wait loop. Entries stay off until a trader turns them on."""
+        self.load_persisted_limits()
+        if self.gateway is None:
+            from app.market.nse_public import load_holidays
+
+            await load_holidays()
+            await self.reconcile_executing()
         if self._task and not self._task.done():
             return
         # A new event each start. TestClient gives every test its own loop,
@@ -111,7 +117,71 @@ class AutomationRunner:
         )
         _validate_limits(updated)
         self.limits = updated
+        self._save_limits()
         return self.limits
+
+    def load_persisted_limits(self) -> None:
+        """Use the admin's last saved limits when the database has them."""
+        from app import db
+
+        try:
+            saved = db.get_risk_settings()
+        except Exception:
+            return
+        if not saved:
+            return
+        self.limits = RiskLimits(
+            max_positions=int(saved["max_positions"]),
+            capital_per_trade_pct=float(saved["capital_per_trade_pct"]),
+            cash_reserve_pct=float(saved["cash_reserve_pct"]),
+            take_profit_pct=float(saved["take_profit_pct"]),
+            stop_loss_pct=float(saved["stop_loss_pct"]),
+            max_daily_loss_inr=float(saved["max_daily_loss_inr"]),
+            screener_limit=int(saved["screener_limit"]),
+            cycle_interval_seconds=int(saved["cycle_interval_seconds"]),
+        )
+
+    def _save_limits(self) -> None:
+        from app import db
+
+        current = self.limits
+        db.save_risk_settings(
+            {
+                "max_positions": current.max_positions,
+                "capital_per_trade_pct": current.capital_per_trade_pct,
+                "cash_reserve_pct": current.cash_reserve_pct,
+                "take_profit_pct": current.take_profit_pct,
+                "stop_loss_pct": current.stop_loss_pct,
+                "max_daily_loss_inr": current.max_daily_loss_inr,
+                "screener_limit": current.screener_limit,
+                "cycle_interval_seconds": current.cycle_interval_seconds,
+            }
+        )
+
+    async def reconcile_executing(self) -> None:
+        """Finish rows that were claimed before a restart. Do not send them again."""
+        from app import db
+        from app.broker import dhan_gateway
+        from app.broker.trading_gateway import gateway_for_user
+
+        for row in db.list_executing():
+            user = db.get_user(row["user_id"])
+            tag = row.get("correlation_id")
+            if user is None or not tag:
+                continue
+            gateway = gateway_for_user(user)
+            if gateway.mode != "live" or not gateway._creds:
+                continue
+            try:
+                found = await dhan_gateway.find_order_by_tag(tag, gateway._creds)
+            except Exception as exc:
+                logger.warning("could not reconcile pending %s: %s", row["id"], exc)
+                continue
+            status = str(found.get("status") or "").upper()
+            if status in {"TRADED", "FILLED", "PART_TRADED"}:
+                db.set_pending_status(row["id"], "executed")
+            elif status in {"REJECTED", "CANCELLED", "EXPIRED"}:
+                db.set_pending_status(row["id"], "failed")
 
     async def run_once(self, now: datetime | None = None) -> dict | None:
         """Run one pass when the session is open and there is work to do.
@@ -204,18 +274,29 @@ class AutomationRunner:
         moment = now or now_ist()
         if not is_nse_cash_session_open(moment):
             return
+        from app.trading.screener import allowed_symbols
+
         for user in db.traders_to_run():
             gateway = gateway_for_user(user)
             methods = json.loads(user["automation_methods"] or "[]")
-            entries_on = user["automation_state"] == "entries"
+            entries_on = user["automation_state"] == "entries" and user["role"] == "trader" and not user["disabled"]
+            index_name = user.get("trading_index") or "NIFTY 50"
             try:
-                snapshot = await run_intraday_cycle(
-                    gateway,
-                    entries_enabled=entries_on,
-                    methods=methods,
-                    limits=self.limits,
-                    now=moment,
-                )
+                universe = await allowed_symbols(index_name)
+            except Exception as exc:
+                logger.warning("index load failed for user %s: %s", user["id"], exc)
+                universe = set()
+            try:
+                async with gateway.exclusive():
+                    snapshot = await run_intraday_cycle(
+                        gateway,
+                        entries_enabled=entries_on,
+                        methods=methods,
+                        limits=self.limits,
+                        now=moment,
+                        trading_index=index_name,
+                        allowed_symbols=universe,
+                    )
                 self.user_cycles.setdefault(user["id"], deque(maxlen=CYCLE_HISTORY)).append(snapshot)
                 self.user_errors.pop(user["id"], None)
                 if not entries_on:
@@ -231,6 +312,9 @@ class AutomationRunner:
         while not self._stop.is_set():
             try:
                 if self.gateway is None:
+                    from app.broker.dhan_token import refresh_saved_tokens
+
+                    await refresh_saved_tokens()
                     await self.run_enabled_traders()
                 else:
                     await self.run_once()

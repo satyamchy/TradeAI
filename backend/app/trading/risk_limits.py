@@ -54,6 +54,7 @@ def check_new_entry(
     square_off_due: bool,
     daily_loss_halt: bool,
     product_type: str = "INTRADAY",
+    allowed_symbols: set[str] | None = None,
 ) -> str | None:
     """Return a rejection reason, or None when the entry may be sent.
 
@@ -70,7 +71,11 @@ def check_new_entry(
         return "daily loss limit is hit"
     if product_type == "INTRADAY" and open_position_count >= limits.max_positions:
         return "max open positions is reached"
-    if not is_nifty50_symbol(symbol):
+    universe = allowed_symbols if allowed_symbols is not None else None
+    if universe is not None:
+        if normalize_symbol(symbol) not in universe:
+            return "symbol is not in the selected index"
+    elif not is_nifty50_symbol(symbol):
         return "symbol is not in the NIFTY 50 list"
     if not security_id:
         return "Dhan security id is missing"
@@ -165,8 +170,10 @@ def mark_positions_to_exit(
             float(position["last_price"]),
             quantity,
         )
+        product = str(position.get("product_type") or "INTRADAY")
         reason = None
-        if force_square_off:
+        # Delivery is not flattened on the clock. Intraday is.
+        if force_square_off and product != "DELIVERY":
             reason = "square-off"
         elif pnl_percent >= take_profit_pct:
             reason = "take-profit"
@@ -186,9 +193,15 @@ def mark_positions_to_exit(
     return exits
 
 
-def daily_loss_halt(realized_pnl_inr: float, max_daily_loss_inr: float) -> bool:
-    """True when today's realized loss has reached the limit.
+def daily_loss_halt(
+    realized_pnl_inr: float,
+    max_daily_loss_inr: float,
+    unrealized_pnl_inr: float = 0.0,
+) -> bool:
+    """True when today's realized plus open loss has reached the limit.
 
-    `realized_pnl_inr` is negative for a loss. The limit is a positive INR amount.
+    Both P&L figures are negative for a loss. The limit is a positive INR amount.
+    A later market flatten can still slip past the number; the broker stop bounds
+    each position while this process is down.
     """
-    return realized_pnl_inr <= -abs(max_daily_loss_inr)
+    return (realized_pnl_inr + unrealized_pnl_inr) <= -abs(max_daily_loss_inr)

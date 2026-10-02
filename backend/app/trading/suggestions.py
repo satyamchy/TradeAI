@@ -39,13 +39,18 @@ def accept_model_choice(raw: str, choices: list[dict]) -> dict | None:
     return None
 
 
-async def build_suggestion(limits: RiskLimits, balance_inr: float, open_positions: int) -> dict:
+async def build_suggestion(
+    limits: RiskLimits,
+    balance_inr: float,
+    open_positions: int,
+    index: str | None = None,
+) -> dict:
     """Ask for one pick and size it. Raises ValueError when nothing valid comes back.
 
     The returned dict is a pending order payload. It is not an order.
     """
-    long_rows = await rank_nifty50("long", limit=limits.screener_limit)
-    short_rows = await rank_nifty50("short", limit=limits.screener_limit)
+    long_rows = await rank_nifty50("long", limit=limits.screener_limit, index=index)
+    short_rows = await rank_nifty50("short", limit=limits.screener_limit, index=index)
     choices = [{"symbol": row["symbol"], "side": "BUY", "ltp": row["ltp"]} for row in long_rows]
     choices += [{"symbol": row["symbol"], "side": "SELL", "ltp": row["ltp"]} for row in short_rows]
     if not choices:

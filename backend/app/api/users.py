@@ -49,6 +49,25 @@ def patch_user(user_id: int, body: UpdateUserRequest, request: Request):
     require_admin(request)
     if body.role is not None and body.role not in ROLES:
         raise HTTPException(status_code=400, detail="role must be admin, trader, or viewer")
+    previous = db.get_user(user_id)
+    if previous is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    losing_admin = previous["role"] == "admin" and not previous["disabled"] and (
+        body.disabled is True or (body.role is not None and body.role != "admin")
+    )
+    if losing_admin:
+        others = [
+            row
+            for row in db.list_users()
+            if row["role"] == "admin" and not row["disabled"] and row["id"] != user_id
+        ]
+        if not others:
+            raise HTTPException(status_code=400, detail="The last admin cannot be disabled or demoted")
+    leaving_trader = previous["role"] == "trader" and (
+        body.disabled is True or (body.role is not None and body.role != "trader")
+    )
+    if leaving_trader:
+        db.set_automation(user_id, "exits_only", previous["automation_methods"] or "[]")
     user = db.update_user(user_id, role=body.role, disabled=body.disabled)
     if user is None:
         raise HTTPException(status_code=404, detail="User not found")

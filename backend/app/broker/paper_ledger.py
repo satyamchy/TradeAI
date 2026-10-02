@@ -5,6 +5,9 @@ side reserves last-price times shares from the cash balance, so a short does
 not increase the cash that can be spent on the next order. Closing returns
 that reserve plus the realized profit or loss.
 
+Each mutation reloads the file first and writes a temp file that is then
+renamed over the ledger, so a later fill cannot drop an earlier one.
+
 This file is never sent to Dhan.
 """
 
@@ -12,6 +15,7 @@ from __future__ import annotations
 
 import json
 import os
+import tempfile
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -23,11 +27,15 @@ class PaperLedgerError(Exception):
 
 
 class PaperLedger:
-    """JSON ledger. Mutations do not await, so they stay atomic on one event loop."""
+    """JSON ledger. Callers serialize mutations; this file reloads before each one."""
 
     def __init__(self, path: str, starting_balance_inr: float):
         self.path = path
         self.starting_balance_inr = float(starting_balance_inr)
+        self._state = self._load()
+
+    def reload(self) -> None:
+        """Read the file again so this object sees fills another request saved."""
         self._state = self._load()
 
     def available_balance_inr(self) -> float:
@@ -42,15 +50,17 @@ class PaperLedger:
             if not product:
                 symbol = key
                 product = position.get("product_type", "INTRADAY")
+            quantity = int(position["quantity"])
             rows.append(
                 {
                     "symbol": symbol,
                     "security_id": position["security_id"],
-                    "quantity": int(position["quantity"]),
+                    "quantity": quantity,
                     "average_price": float(position["average_price"]),
                     "last_price": float(position["last_price"]),
                     "realized_pnl_inr": 0.0,
                     "product_type": product,
+                    "available_qty": quantity if quantity > 0 else 0,
                 }
             )
         return rows
@@ -63,10 +73,14 @@ class PaperLedger:
         """Sum of paper profits booked today in IST, in INR. Losses are negative."""
         return float(self._state["realized_pnl_by_date"].get(_today_ist(), 0.0))
 
-    def set_last_price(self, symbol: str, last_price: float) -> None:
+    def set_last_price(self, symbol: str, last_price: float, product_type: str = "INTRADAY") -> None:
         """Store the latest mark, in INR, without changing cash or quantity."""
-        position = self._state["positions"].get(symbol)
-        if position is None or last_price <= 0:
+        self.reload()
+        if last_price <= 0:
+            return
+        key = _position_key(symbol, product_type)
+        position = self._state["positions"].get(key)
+        if position is None:
             return
         position["last_price"] = float(last_price)
         self._save()
@@ -83,8 +97,9 @@ class PaperLedger:
         """Fill a market order immediately at `price` INR per share.
 
         `quantity` is a positive share count. BUY increases the signed
-        position; SELL decreases it.
+        position; SELL decreases it. The file is reloaded first.
         """
+        self.reload()
         if side not in {"BUY", "SELL"}:
             raise PaperLedgerError("side must be BUY or SELL")
         if quantity <= 0:
@@ -93,7 +108,7 @@ class PaperLedger:
             raise PaperLedgerError("price must be greater than 0")
 
         signed_quantity = quantity if side == "BUY" else -quantity
-        key = symbol if product_type == "INTRADAY" else f"{symbol}#{product_type}"
+        key = _position_key(symbol, product_type)
         self._apply_fill(key, security_id, signed_quantity, float(price), product_type)
         order = {
             "order_id": f"paper-{self._state['next_order_id']}",
@@ -125,6 +140,9 @@ class PaperLedger:
         quantity = int(position["quantity"]) if position else 0
         average = float(position["average_price"]) if position else 0.0
 
+        if product_type == "DELIVERY" and signed_quantity < 0 and quantity <= 0:
+            raise PaperLedgerError("delivery sell needs shares you already hold")
+
         same_side = quantity == 0 or (quantity > 0 and signed_quantity > 0) or (quantity < 0 and signed_quantity < 0)
         if same_side:
             self._reserve(abs(signed_quantity) * price)
@@ -144,6 +162,8 @@ class PaperLedger:
         new_quantity = quantity + signed_quantity
         if (quantity > 0 and new_quantity < 0) or (quantity < 0 and new_quantity > 0):
             raise PaperLedgerError("order would flip the position; close it first")
+        if product_type == "DELIVERY" and new_quantity < 0:
+            raise PaperLedgerError("delivery sell needs shares you already hold")
 
         if quantity > 0:
             pnl = (price - average) * closing
@@ -194,8 +214,25 @@ class PaperLedger:
         directory = os.path.dirname(self.path)
         if directory:
             os.makedirs(directory, exist_ok=True)
-        with open(self.path, "w", encoding="utf-8") as handle:
-            json.dump(self._state, handle, indent=2)
+        else:
+            directory = "."
+        fd, tmp = tempfile.mkstemp(dir=directory, suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                json.dump(self._state, handle, indent=2)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(tmp, self.path)
+        except Exception:
+            if os.path.exists(tmp):
+                os.remove(tmp)
+            raise
+
+
+def _position_key(symbol: str, product_type: str) -> str:
+    if product_type == "INTRADAY":
+        return symbol
+    return f"{symbol}#{product_type}"
 
 
 def _today_ist() -> str:

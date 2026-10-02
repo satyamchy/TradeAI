@@ -11,7 +11,8 @@ import numpy as np
 
 from app.broker import dhan_gateway
 from app.config import settings
-from app.trading.nifty50 import NIFTY50_SYMBOLS, normalize_symbol
+from app.market import nse_public
+from app.trading.nifty50 import canonical_index, normalize_symbol
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -72,67 +73,95 @@ def order_candidates(scored: list[dict], side: str, limit: int) -> list[dict]:
     return ranked[:limit]
 
 
-async def rank_nifty50(side: str, exclude: set[str] | None = None, limit: int | None = None) -> list[dict]:
-    """Rank the NIFTY 50 universe.
+async def rank_nifty50(
+    side: str,
+    exclude: set[str] | None = None,
+    limit: int | None = None,
+    index: str | None = None,
+) -> list[dict]:
+    """Rank one NSE index.
 
-    `exclude` is symbols already held, so the cycle does not add to them.
-    `limit` defaults to the configured screener size.
+    The order of names comes from the NSE snapshot. Dhan session candles
+    refine the shortlist when today's bars are long enough. `exclude` is
+    symbols already held. `limit` defaults to the configured screener size.
     """
     skipped = {normalize_symbol(symbol) for symbol in (exclude or set())}
     keep = limit or settings.screener_limit
-    scored: list[dict] = []
-    for symbol in NIFTY50_SYMBOLS:
+    index_name = canonical_index(index)
+    try:
+        snapshot = await nse_public.snapshot(index_name)
+    except Exception as exc:
+        logger.warning("index snapshot failed: %s", exc)
+        snapshot = []
+    rows = []
+    for item in snapshot:
+        symbol = normalize_symbol(item["symbol"])
         if symbol in skipped:
             continue
+        rows.append(
+            {
+                "symbol": symbol,
+                "ltp": float(item.get("ltp") or 0),
+                "percent_change": float(item.get("percent_change") or 0),
+                "score": float(item.get("percent_change") or 0),
+            }
+        )
+    shortlist = order_candidates(rows, side, max(keep * 3, keep))
+    scored: list[dict] = []
+    for item in shortlist:
         try:
-            row = score_candles(symbol, await fetch_candles(symbol))
+            candle_score = score_candles(item["symbol"], await fetch_candles(item["symbol"]))
         except Exception as exc:
-            logger.warning("screener skipped %s: %s", symbol, exc)
-            continue
-        if row:
-            scored.append(row)
+            logger.warning("screener skipped %s: %s", item["symbol"], exc)
+            candle_score = None
+        if candle_score:
+            candle_score["ltp"] = item["ltp"] or candle_score["ltp"]
+            scored.append(candle_score)
+        else:
+            scored.append(item)
     return order_candidates(scored, side, keep)
 
 
+async def allowed_symbols(index: str | None = None) -> set[str]:
+    """Constituents of the selected index. Empty when that index cannot be loaded."""
+    symbols = await nse_public.constituents(canonical_index(index))
+    return {normalize_symbol(symbol) for symbol in symbols}
+
+
 async def last_traded_prices(symbols: list[str]) -> dict[str, float]:
-    """Latest close for each symbol, in INR. Symbols with no bars are omitted."""
-    prices: dict[str, float] = {}
+    """Dhan quote for each symbol, in INR. Names with no quote are omitted.
+
+    This is the process-token path. A trader gateway prefers its own token.
+    """
+    if not symbols or not dhan_gateway.is_dhan_configured():
+        return {}
+    mapping: dict[str, str] = {}
     for symbol in symbols:
         normalized = normalize_symbol(symbol)
         try:
-            frame = await fetch_candles(normalized)
+            security_id = await dhan_gateway.resolve_security_id(normalized)
         except Exception as exc:
             logger.warning("price lookup skipped %s: %s", normalized, exc)
             continue
-        if frame is not None and len(frame):
-            prices[normalized] = float(frame["close"].iloc[-1])
-    return prices
+        if security_id:
+            mapping[normalized] = security_id
+    try:
+        return await dhan_gateway.quote_prices(mapping)
+    except Exception as exc:
+        logger.warning("Dhan quote failed: %s", exc)
+        return {}
 
 
 async def fetch_candles(symbol: str) -> pd.DataFrame | None:
-    """15-minute bars. Dhan when it is configured, otherwise yfinance in paper mode only."""
+    """Today's 15-minute bars from Dhan, in IST. No other source."""
     normalized = normalize_symbol(symbol)
-    if dhan_gateway.is_dhan_configured():
-        security_id = await dhan_gateway.resolve_security_id(normalized)
-        if security_id:
-            frame = await dhan_gateway.fetch_intraday_candles(normalized, security_id)
-            if frame is not None:
-                return frame
-        if settings.trading_mode.strip().lower() != "paper":
-            return None
-    if settings.trading_mode.strip().lower() == "paper":
-        return _yfinance_candles(normalized)
-    return None
-
-
-def _yfinance_candles(symbol: str) -> pd.DataFrame | None:
-    import yfinance as yf
-
-    frame = yf.Ticker(f"{symbol}.NS").history(period="5d", interval="15m")
-    if frame is None or frame.empty:
+    if not dhan_gateway.is_dhan_configured():
         return None
-    frame = frame.rename(columns=str.lower)
-    return frame[["open", "high", "low", "close", "volume"]]
+    security_id = await dhan_gateway.resolve_security_id(normalized)
+    if not security_id:
+        logger.info("no Dhan security id for %s", normalized)
+        return None
+    return await dhan_gateway.fetch_intraday_candles(normalized, security_id)
 
 
 def _rsi(close: pd.Series, period: int = 14) -> float:

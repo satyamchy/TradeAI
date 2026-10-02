@@ -1,36 +1,27 @@
-# PAIOS Frontend
+# TradeX desk
 
-React + Vite frontend for the PAIOS Chat Core. It includes login/register, guest exploration mode, conversation sidebar, three interaction modes, markdown rendering, sources, tool calls, composer, model selector, and run details.
+Vite and React. The desk talks to the FastAPI process. There is no signup page.
 
-## Install Later
+## Run locally
 
-```bash
-cd frontend
+```text
 npm install
-```
-
-## Run Later
-
-```bash
 npm run dev
 ```
 
-## Configure Later
+Open http://localhost:5173. The client calls `http://localhost:8000` unless `VITE_API_URL` is set. Copy `frontend/.env.example` to `frontend/.env` only when the API is somewhere else. Do not append `/api/v1`.
 
-Set this when the backend URL changes:
+## Production build
 
-```env
-VITE_API_URL=http://localhost:8000/v1
+```text
+VITE_API_URL=https://api.example.com npm run build
 ```
 
-## Structure
+Serve `dist/` from the origin set as `FRONTEND_ORIGIN` on the API. See [REPO.md](../REPO.md).
 
-- `src/api`: Axios client and API wrappers.
-- `src/pages`: route-level screens.
-- `src/components/sidebar`: conversation navigation.
-- `src/components/mode`: top chat mode selector.
-- `src/components/chat`: chat area, composer, messages, sources, tools.
-- `src/components/run-details`: model run metadata display.
-- `src/hooks`: auth lifecycle logic.
-- `src/store`: Zustand stores prepared for later expansion.
-- `src/routes`: route guards.
+## Screens
+
+- `src/pages/DeskPage.jsx` shows cash, positions, the selected index, and Close.
+- `src/pages/OrdersPage.jsx` is the pending list, the blotter, and manual orders.
+- `src/pages/SettingsPage.jsx` saves the Dhan token and the shared limits.
+- `src/api/stockApi.js` is the HTTP client. The session cookie is sent with each request.

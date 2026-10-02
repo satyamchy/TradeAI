@@ -1,33 +1,18 @@
-# TradeAI backend refactor
+# Where an order goes
 
-The backend now uses a simple function-based flow:
+The earlier service layout (`app/services/dhan_service.py`, `app/api/trading_routes.py`, LangGraph) is gone. The desk uses this path:
 
 ```text
-Frontend / LangGraph
-        |
-        v
-FastAPI route
-        |
-        v
-Application service
-        |
-        +---- Dhan service ----> DhanHQ Python SDK
-        |
-        +---- Trade service ---> SQLAlchemy / DB
+Desk
+  -> FastAPI route in backend/app/api/
+  -> pending claim or the intraday handler
+  -> TradingGateway
+       -> paper ledger, or
+       -> DhanHQ SDK for a live order
 ```
 
-## Trading flow
+Live quotes, funds, positions, holdings, and orders use the trader token saved on Settings. `backend/app/broker/dhan_gateway.py` is the only module that imports the SDK. `backend/app/broker/dhan_token.py` renews that token before the 24-hour expiry.
 
-`POST /v1/trading/orders` -> `app.api.trading_routes.create_order()` -> `app.services.dhan_service.place_order()` -> guardrails -> Dhan SDK (live) or local journal (paper).
+NSE public JSON in `backend/app/market/nse_public.py` supplies holidays, constituents, and the rank. It does not price an order.
 
-The same `place_order()` function can be called by the LangGraph/harness layer, so the frontend and AI never have separate execution logic.
-
-## Files simplified
-
-- `app/integrations/dhan/client.py`: only Dhan SDK connection, async wrapper, and security-ID lookup.
-- `app/services/dhan_service.py`: all Dhan application operations and order orchestration.
-- `app/services/trade_service.py`: local trade-journal CRUD and summary.
-- `app/api/trading_routes.py`: thin trading endpoints.
-- `app/api/trade_routes.py`: thin trade-journal endpoints.
-
-The existing public route paths and compatibility imports from `app.services.dhan_service` are preserved.
+One process only. See [REPO.md](../REPO.md).

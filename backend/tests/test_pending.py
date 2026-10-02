@@ -72,3 +72,101 @@ def test_delivery_is_not_filled_until_execute(tmp_path, monkeypatch):
         assert client.post("/api/v1/auth/login", json={"username": "viewer1", "password": "password1"}).status_code == 200
         refused = client.post("/api/v1/orders/delivery", json={"symbol": "TCS", "side": "BUY", "quantity": 1})
         assert refused.status_code == 403
+
+
+def test_second_execute_does_not_place_again(tmp_path, monkeypatch):
+    from app import db
+    from app.auth import hash_password
+    from app.config import settings
+    from main import app
+
+    monkeypatch.setattr(settings, "database_path", str(tmp_path / "tradex.db"))
+    monkeypatch.setattr(settings, "paper_ledger_dir", str(tmp_path / "ledgers"))
+    monkeypatch.setattr(settings, "trading_mode", "paper")
+    monkeypatch.setattr(dhan_gateway, "is_dhan_configured", lambda: False)
+
+    async def prices(symbols):
+        return {symbol: 100.0 for symbol in symbols}
+
+    monkeypatch.setattr("app.trading.pending.last_traded_prices", prices)
+    monkeypatch.setattr("app.trading.pending.is_nse_cash_session_open", lambda moment=None: True)
+    monkeypatch.setattr("app.trading.pending.is_past_entry_cutoff", lambda moment=None: False)
+    monkeypatch.setattr("app.trading.pending.is_square_off_time", lambda moment=None: False)
+
+    db.init_db()
+    db.create_user("trader1", hash_password("password1"), "trader")
+
+    with TestClient(app) as client:
+        assert client.post("/api/v1/auth/login", json={"username": "trader1", "password": "password1"}).status_code == 200
+        saved = client.post("/api/v1/orders/delivery", json={"symbol": "RELIANCE", "side": "BUY", "quantity": 1})
+        pending_id = saved.json()["id"]
+        assert client.post(f"/api/v1/orders/pending/{pending_id}/execute").status_code == 200
+        again = client.post(f"/api/v1/orders/pending/{pending_id}/execute")
+        assert again.status_code == 400
+        assert client.get("/api/v1/account/positions").json()["count"] == 1
+
+
+def test_closing_sell_is_not_blocked_by_the_entry_cap(tmp_path, monkeypatch):
+    from app import db
+    from app.auth import hash_password
+    from app.config import settings
+    from app.trading import pending as pending_module
+    from main import app
+
+    monkeypatch.setattr(settings, "database_path", str(tmp_path / "tradex.db"))
+    monkeypatch.setattr(settings, "paper_ledger_dir", str(tmp_path / "ledgers"))
+    monkeypatch.setattr(settings, "trading_mode", "paper")
+    monkeypatch.setattr(dhan_gateway, "is_dhan_configured", lambda: False)
+
+    async def prices(symbols):
+        return {symbol: 100.0 for symbol in symbols}
+
+    def blocked(**kwargs):
+        return "order is above the per-trade cash cap"
+
+    monkeypatch.setattr("app.trading.pending.last_traded_prices", prices)
+    monkeypatch.setattr("app.trading.pending.is_nse_cash_session_open", lambda moment=None: True)
+    monkeypatch.setattr("app.trading.pending.is_past_entry_cutoff", lambda moment=None: False)
+    monkeypatch.setattr("app.trading.pending.is_square_off_time", lambda moment=None: False)
+    monkeypatch.setattr(pending_module, "check_new_entry", blocked)
+
+    db.init_db()
+    db.create_user("trader1", hash_password("password1"), "trader")
+
+    with TestClient(app) as client:
+        assert client.post("/api/v1/auth/login", json={"username": "trader1", "password": "password1"}).status_code == 200
+        # Seed the long directly so the entry cap is not what creates it.
+        from app.broker.trading_gateway import gateway_for_user
+
+        user = db.get_user_by_username("trader1")
+        gateway_for_user(user)._paper.fill_intraday_order("RELIANCE", "RELIANCE", "BUY", 1, 100, product_type="DELIVERY")
+        saved = client.post("/api/v1/orders/delivery", json={"symbol": "RELIANCE", "side": "SELL", "quantity": 1})
+        assert saved.status_code == 200
+        executed = client.post(f"/api/v1/orders/pending/{saved.json()['id']}/execute")
+        assert executed.status_code == 200
+        assert client.get("/api/v1/account/positions").json()["count"] == 0
+
+
+def test_square_off_stops_new_entries(tmp_path, monkeypatch):
+    from app import db
+    from app.auth import hash_password
+    from app.config import settings
+    from main import app
+
+    monkeypatch.setattr(settings, "database_path", str(tmp_path / "tradex.db"))
+    monkeypatch.setattr(settings, "paper_ledger_dir", str(tmp_path / "ledgers"))
+    monkeypatch.setattr(settings, "trading_mode", "paper")
+    monkeypatch.setattr("app.api.automation.is_nse_cash_session_open", lambda moment=None: False)
+    monkeypatch.setattr("app.trading.automation_runner.is_nse_cash_session_open", lambda moment=None: False)
+
+    db.init_db()
+    db.create_user("trader1", hash_password("password1"), "trader")
+
+    with TestClient(app) as client:
+        assert client.post("/api/v1/auth/login", json={"username": "trader1", "password": "password1"}).status_code == 200
+        assert client.post("/api/v1/automation/enable", json={"methods": ["intraday_long"]}).status_code == 200
+        square = client.post("/api/v1/automation/square-off-open-positions")
+        assert square.status_code == 400
+        status = client.get("/api/v1/automation/status")
+        assert status.json()["enabled"] is False
+        assert status.json()["automation_state"] == "exits_only"

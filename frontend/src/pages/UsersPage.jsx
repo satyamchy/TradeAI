@@ -31,8 +31,21 @@ export default function UsersPage() {
   }
 
   async function toggle(row) {
+    const disabling = !row.disabled;
+    if (disabling && !window.confirm(`Disable ${row.username}? Open intraday positions stay in the exit loop until they are flat.`)) return;
     try {
-      await updateUser(row.id, { disabled: !row.disabled });
+      await updateUser(row.id, { disabled: disabling });
+      await load();
+    } catch (err) {
+      setError(errorText(err));
+    }
+  }
+
+  async function changeRole(row, role) {
+    if (role === row.role) return;
+    if (row.role === 'trader' && !window.confirm('This account will stop opening positions. Open intraday risk is flattened on the next pass.')) return;
+    try {
+      await updateUser(row.id, { role });
       await load();
     } catch (err) {
       setError(errorText(err));
@@ -55,6 +68,11 @@ export default function UsersPage() {
               <strong>{row.username}</strong>
               <span className="muted"> {row.role}{row.disabled ? ' · disabled' : ''}</span>
             </div>
+            <select value={row.role} onChange={(event) => changeRole(row, event.target.value)}>
+              <option value="trader">trader</option>
+              <option value="viewer">viewer</option>
+              <option value="admin">admin</option>
+            </select>
             <button type="button" className="ghost" onClick={() => toggle(row)}>
               {row.disabled ? 'Enable' : 'Disable'}
             </button>

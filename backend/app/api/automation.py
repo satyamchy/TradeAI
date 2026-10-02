@@ -16,6 +16,7 @@ from app.broker.trading_gateway import gateway_for_user
 from app.trading.automation_runner import ALLOWED_METHODS, CYCLE_HISTORY, automation_runner
 from app.trading.intraday_cycle import run_intraday_cycle
 from app.trading.nse_session import is_nse_cash_session_open, is_past_entry_cutoff, is_square_off_time, now_ist
+from app.trading.nifty50 import INDEX_CHOICES, canonical_index
 from app.trading.pending import set_user_automation
 
 router = APIRouter(prefix="/automation", tags=["automation"])
@@ -25,6 +26,7 @@ class EnableAutomationRequest(BaseModel):
     """Methods this trader may open. Existing positions are still managed either way."""
 
     methods: list[str] = Field(min_length=1)
+    trading_index: str | None = None
 
 
 class AutomationSettingsPatch(BaseModel):
@@ -61,7 +63,8 @@ def _view(user: dict, position_count: int | None) -> dict:
     square_off_due = session_open and is_square_off_time(moment)
     entries_on = user["automation_state"] == "entries"
     if not entries_on:
-        next_action = "managing_exits_only" if user["automation_state"] == "exits_only" else "disabled"
+        managing = user["automation_state"] == "exits_only" and position_count
+        next_action = "managing_exits_only" if managing else "disabled"
     elif not session_open:
         next_action = "waiting_for_session"
     elif square_off_due:
@@ -83,6 +86,8 @@ def _view(user: dict, position_count: int | None) -> dict:
         "last_error": automation_runner.user_errors.get(user["id"]),
         "open_position_count": position_count,
         "cycle_count": len(cycles),
+        "trading_index": user.get("trading_index") or "NIFTY 50",
+        "indexes": list(INDEX_CHOICES),
     }
 
 
@@ -115,6 +120,11 @@ async def enable_automation(body: EnableAutomationRequest, request: Request):
     if unknown:
         raise HTTPException(status_code=400, detail="methods must include intraday_long, intraday_short, or both")
     methods = list(dict.fromkeys(body.methods))
+    if body.trading_index:
+        index_name = canonical_index(body.trading_index)
+        if body.trading_index.strip().upper() not in {key.upper() for key in INDEX_CHOICES}:
+            raise HTTPException(status_code=400, detail="index must be one of the NSE lists")
+        db.set_trading_index(user["id"], index_name)
     set_user_automation(user, "entries", methods)
     return await _status(user)
 
@@ -132,19 +142,31 @@ async def square_off_open_positions(request: Request):
     """Close this trader's open intraday positions now. 403 for non-traders. Delivery holdings are left alone."""
     user = require_trader(request)
     methods = json.loads(user["automation_methods"] or "[]")
+    set_user_automation(user, "exits_only", methods)
+    if not is_nse_cash_session_open():
+        raise HTTPException(status_code=400, detail="NSE cash session is closed")
+    gateway = gateway_for_user(user)
     try:
-        snapshot = await run_intraday_cycle(
-            gateway_for_user(user),
-            entries_enabled=False,
-            methods=methods,
-            limits=automation_runner.limits,
-            force_square_off=True,
-        )
+        async with gateway.exclusive():
+            snapshot = await run_intraday_cycle(
+                gateway,
+                entries_enabled=False,
+                methods=methods,
+                limits=automation_runner.limits,
+                force_square_off=True,
+                trading_index=user.get("trading_index") or "NIFTY 50",
+            )
     except Exception as exc:
         db.add_event(user["id"], "square_off", "failed", detail=str(exc))
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     automation_runner.user_cycles.setdefault(user["id"], deque(maxlen=CYCLE_HISTORY)).append(snapshot)
-    db.add_event(user["id"], "square_off", "placed", detail=f"{len(snapshot.get('exits', []))} exits")
+    exits = snapshot.get("exits") or []
+    traded = [row for row in exits if row.get("status") == "PLACED"]
+    failed = [row for row in exits if row.get("status") == "FAILED"]
+    if failed and not traded:
+        db.add_event(user["id"], "square_off", "failed", detail=f"{len(failed)} exits failed")
+    else:
+        db.add_event(user["id"], "square_off", "placed", detail=f"{len(traded)} exits")
     return snapshot
 
 

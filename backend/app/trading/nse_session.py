@@ -20,6 +20,10 @@ ENTRY_CUTOFF = time(14, 45)
 # MIS positions must be flat before the exchange's own square-off. 15:15 leaves a buffer.
 SQUARE_OFF = time(15, 15)
 
+# None until a load is attempted. "loaded" allows entries. "failed" blocks new risk.
+_holiday_dates: set[str] | None = None
+_holiday_status: str = "unknown"
+
 
 def now_ist() -> datetime:
     """Current time in India Standard Time."""
@@ -30,13 +34,33 @@ def _moment(moment: datetime | None) -> datetime:
     return moment if moment is not None else now_ist()
 
 
+def set_holidays(dates: set[str], status: str = "loaded") -> None:
+    """Install IST holiday dates as YYYY-MM-DD. `failed` blocks new entries."""
+    global _holiday_dates, _holiday_status
+    _holiday_dates = set(dates)
+    _holiday_status = status
+
+
+def new_entries_blocked() -> bool:
+    """True when the holiday list could not be loaded. Exits still run."""
+    return _holiday_status == "failed"
+
+
+def is_nse_holiday(moment: datetime | None = None) -> bool:
+    """True when this IST date is on the loaded NSE holiday list."""
+    if not _holiday_dates:
+        return False
+    current = _as_ist(_moment(moment))
+    return current.date().isoformat() in _holiday_dates
+
+
 def is_nse_cash_session_open(moment: datetime | None = None) -> bool:
-    """True from 09:15 to 15:30 IST, Monday to Friday.
+    """True from 09:15 to 15:30 IST, Monday to Friday, excluding NSE holidays.
 
     `moment` is a timezone-aware datetime. Naive values are treated as IST.
     """
     current = _as_ist(_moment(moment))
-    if current.weekday() >= 5:
+    if current.weekday() >= 5 or is_nse_holiday(current):
         return False
     return SESSION_OPEN <= current.time() <= SESSION_CLOSE
 

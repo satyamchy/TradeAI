@@ -6,8 +6,8 @@ They do not construct a `dhanhq` client themselves.
 
 from __future__ import annotations
 
+import asyncio
 import tempfile
-from datetime import datetime, timedelta
 from functools import lru_cache
 from typing import Any
 
@@ -16,6 +16,7 @@ from dhanhq import dhanhq
 from starlette.concurrency import run_in_threadpool
 
 from app.config import settings
+from app.trading.nse_session import now_ist
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -29,6 +30,19 @@ INTRADAY = dhanhq.INTRA
 
 class DhanRequestError(Exception):
     """The DhanHQ SDK call failed or returned a failure status."""
+
+
+class CredentialsRequired(DhanRequestError):
+    """Live account calls need the trader's own saved Dhan token."""
+
+
+_TERMINAL = {"TRADED", "REJECTED", "CANCELLED", "EXPIRED"}
+_WORKING = {"PENDING", "TRANSIT", "PART_TRADED", "OPEN"}
+
+
+def clear_sdk_client() -> None:
+    """Drop the cached process client after the access token is renewed."""
+    _sdk_client.cache_clear()
 
 
 def is_dhan_configured() -> bool:
@@ -90,38 +104,85 @@ async def get_available_balance_inr(creds: tuple[str, str] | None = None) -> flo
     return float(raw or 0)
 
 
-async def get_intraday_positions(creds: tuple[str, str] | None = None) -> list[dict]:
-    """Open NSE intraday positions.
+def require_user_creds(creds: tuple[str, str] | None) -> tuple[str, str]:
+    """Live funds, positions, holdings, and orders use this trader's token only."""
+    if not creds or not creds[0] or not creds[1]:
+        raise CredentialsRequired("Save this trader's Dhan client id and access token before live orders")
+    return creds
 
-    Quantity is signed: positive is long, negative is short. Delivery
-    positions are left out so this loop cannot flatten holdings it did
-    not open as MIS.
+
+async def get_intraday_positions(creds: tuple[str, str] | None = None) -> list[dict]:
+    """Open positions. Intraday and delivery are both returned, tagged by product."""
+    return await get_account_book(creds)
+
+
+async def get_account_book(creds: tuple[str, str] | None = None) -> list[dict]:
+    """Intraday net positions plus delivery quantity that can be sold.
+
+    MIS rows stay `INTRADAY`. CNC day-nets and demat holdings become
+    `DELIVERY`. A symbol is not given a second intraday row.
     """
+    if creds is None and not is_dhan_configured():
+        raise CredentialsRequired("Save this trader's Dhan client id and access token before live orders")
     payload = _payload(await _call("get_positions", creds=creds))
     rows = payload if isinstance(payload, list) else []
-    positions = []
+    book: dict[tuple[str, str], dict] = {}
     for row in rows:
         if not isinstance(row, dict):
             continue
-        if not _is_intraday(row):
+        product = "INTRADAY" if _is_intraday(row) else "DELIVERY" if _is_delivery(row) else ""
+        if not product:
             continue
         quantity = int(float(_first(row, "netQty", "net_qty", default=0) or 0))
         if quantity == 0:
             continue
+        symbol = str(_first(row, "tradingSymbol", "trading_symbol", default="")).upper()
         average = float(_first(row, "costPrice", "buyAvg", "averagePrice", default=0) or 0)
         last_price = float(_first(row, "lastTradedPrice", "ltp", default=0) or 0) or average
-        positions.append(
-            {
-                "symbol": str(_first(row, "tradingSymbol", "trading_symbol", default="")).upper(),
-                "security_id": str(_first(row, "securityId", "security_id", default="")),
-                "quantity": quantity,
-                "average_price": average,
-                "last_price": last_price,
-                "realized_pnl_inr": float(_first(row, "realizedProfit", "realized_profit", default=0) or 0),
-                "product_type": "INTRADAY",
-            }
-        )
-    return positions
+        book[(symbol, product)] = {
+            "symbol": symbol,
+            "security_id": normalize_security_id(_first(row, "securityId", "security_id", default="")) or "",
+            "quantity": quantity,
+            "average_price": average,
+            "last_price": last_price,
+            "realized_pnl_inr": float(_first(row, "realizedProfit", "realized_profit", default=0) or 0),
+            "product_type": product,
+            "available_qty": quantity if quantity > 0 else 0,
+        }
+
+    holdings = _payload(await _call("get_holdings", creds=creds))
+    holding_rows = holdings if isinstance(holdings, list) else []
+    for row in holding_rows:
+        if not isinstance(row, dict):
+            continue
+        symbol = str(_first(row, "tradingSymbol", "trading_symbol", default="")).upper()
+        if not symbol:
+            continue
+        available = int(float(_first(row, "availableQty", "available_qty", "totalQty", default=0) or 0))
+        average = float(_first(row, "avgCostPrice", "averagePrice", "costPrice", default=0) or 0)
+        last_price = float(_first(row, "lastTradedPrice", "ltp", default=0) or 0) or average
+        key = (symbol, "DELIVERY")
+        current = book.get(key)
+        day_net = int(current["quantity"]) if current else 0
+        sellable = max(available, 0) + (max(day_net, 0) if current and available else 0)
+        if current and not available:
+            sellable = day_net if day_net > 0 else 0
+        if sellable == 0 and day_net == 0:
+            continue
+        quantity = sellable if sellable else day_net
+        book[key] = {
+            "symbol": symbol,
+            "security_id": normalize_security_id(_first(row, "securityId", "security_id", default=""))
+            or (current or {}).get("security_id")
+            or "",
+            "quantity": quantity,
+            "average_price": average or float((current or {}).get("average_price") or 0),
+            "last_price": last_price or float((current or {}).get("last_price") or 0),
+            "realized_pnl_inr": float((current or {}).get("realized_pnl_inr") or 0),
+            "product_type": "DELIVERY",
+            "available_qty": quantity if quantity > 0 else 0,
+        }
+    return list(book.values())
 
 
 async def get_realized_pnl_today_inr(creds: tuple[str, str] | None = None) -> float:
@@ -142,6 +203,11 @@ async def get_realized_pnl_today_inr(creds: tuple[str, str] | None = None) -> fl
 def _is_intraday(row: dict) -> bool:
     product = str(_first(row, "productType", "product_type", default="")).upper()
     return product in {"INTRADAY", "INTRA", "MIS"}
+
+
+def _is_delivery(row: dict) -> bool:
+    product = str(_first(row, "productType", "product_type", default="")).upper()
+    return product in {"CNC", "DELIVERY", "MARGIN"}
 
 
 async def get_orders(creds: tuple[str, str] | None = None) -> list[dict]:
@@ -179,11 +245,13 @@ async def place_market_order(
     quantity: int,
     product_type: str = "INTRADAY",
     creds: tuple[str, str] | None = None,
+    tag: str | None = None,
 ) -> dict:
-    """Place one NSE market order. `product_type` is INTRADAY or DELIVERY.
+    """Place one NSE market order and poll until it trades, rejects, or times out.
 
-    Quantity is shares. DELIVERY is CNC. The caller has already decided
-    this order should be sent.
+    `product_type` is INTRADAY or DELIVERY. DELIVERY is CNC. `tag` is the
+    correlation id stored before this call. An empty order id stays unknown
+    so the caller does not send a second one.
     """
     if side not in {"BUY", "SELL"}:
         raise DhanRequestError("side must be BUY or SELL")
@@ -194,45 +262,203 @@ async def place_market_order(
 
     response = await _call(
         "place_order",
-        security_id=security_id,
+        security_id=normalize_security_id(security_id) or security_id,
         exchange_segment=NSE_EQUITY,
         transaction_type=BUY if side == "BUY" else SELL,
         quantity=int(quantity),
         order_type=MARKET,
         product_type=INTRADAY if product_type == "INTRADAY" else dhanhq.CNC,
         price=0,
+        tag=tag,
+        creds=creds,
+    )
+    return await _finish_placement(response, creds, tag)
+
+
+async def place_stop_order(
+    security_id: str,
+    side: str,
+    quantity: int,
+    trigger_price: float,
+    product_type: str = "INTRADAY",
+    creds: tuple[str, str] | None = None,
+    tag: str | None = None,
+) -> dict:
+    """Park a stop-market order at Dhan. `side` is the exit side."""
+    if trigger_price <= 0 or quantity <= 0:
+        raise DhanRequestError("stop trigger and quantity must be greater than 0")
+    response = await _call(
+        "place_order",
+        security_id=normalize_security_id(security_id) or security_id,
+        exchange_segment=NSE_EQUITY,
+        transaction_type=BUY if side == "BUY" else SELL,
+        quantity=int(quantity),
+        order_type=dhanhq.SLM,
+        product_type=INTRADAY if product_type == "INTRADAY" else dhanhq.CNC,
+        price=0,
+        trigger_price=round(float(trigger_price), 2),
+        tag=tag,
         creds=creds,
     )
     payload = _payload(response)
     order_id = ""
     if isinstance(payload, dict):
         order_id = str(_first(payload, "orderId", "order_id", default="") or "")
+    if not order_id:
+        raise DhanRequestError("Dhan did not return a stop order id")
+    return {"order_id": order_id, "status": "PENDING", "broker": "dhan", "trigger_price": trigger_price}
+
+
+async def quote_prices(security_ids: dict[str, str], creds: tuple[str, str] | None = None) -> dict[str, float]:
+    """Last traded price in INR, keyed by symbol.
+
+    `security_ids` maps a symbol to a Dhan security id. Candle closes are
+    not used. Symbols with no quote are omitted.
+    """
+    if not security_ids:
+        return {}
+    id_to_symbol: dict[str, str] = {}
+    numeric: list[int] = []
+    for symbol, security_id in security_ids.items():
+        normalized = normalize_security_id(security_id)
+        if not normalized:
+            continue
+        id_to_symbol[normalized] = symbol
+        numeric.append(int(normalized))
+    if not numeric:
+        return {}
+    response = await _call("quote_data", {"NSE_EQ": numeric}, creds=creds)
+    payload = _payload(response)
+    prices: dict[str, float] = {}
+    if not isinstance(payload, dict):
+        return prices
+    books = payload.get("NSE_EQ") if isinstance(payload.get("NSE_EQ"), dict) else payload
+    if not isinstance(books, dict):
+        return prices
+    for raw_id, packet in books.items():
+        if not isinstance(packet, dict):
+            continue
+        last = _first(packet, "last_price", "lastPrice", "ltp", default=0)
+        price = float(last or 0)
+        symbol = id_to_symbol.get(normalize_security_id(raw_id) or "")
+        if symbol and price > 0:
+            prices[symbol] = price
+    return prices
+
+
+async def poll_order(order_id: str, creds: tuple[str, str] | None = None, tag: str | None = None) -> dict:
+    """Read an order until it is terminal, or return the last working status."""
+    last = {"order_id": order_id, "status": "UNKNOWN", "traded_quantity": 0, "broker": "dhan"}
+    for _ in range(8):
+        try:
+            if order_id:
+                response = await _call("get_order_by_id", order_id, creds=creds)
+            elif tag:
+                response = await _call("get_order_by_correlationID", tag, creds=creds)
+            else:
+                return last
+        except DhanRequestError as exc:
+            last["error"] = str(exc)
+            await asyncio.sleep(0.4)
+            continue
+        parsed = _parse_order(response, order_id)
+        last = parsed
+        if parsed["status"] in _TERMINAL or parsed["status"] == "PART_TRADED":
+            return parsed
+        await asyncio.sleep(0.4)
+    return last
+
+
+async def find_order_by_tag(tag: str, creds: tuple[str, str] | None = None) -> dict:
+    """Recover an order after a crash using the correlation id stored first."""
+    response = await _call("get_order_by_correlationID", tag, creds=creds)
+    return _parse_order(response, "")
+
+
+def normalize_security_id(raw: Any) -> str | None:
+    """Turn a master-file float such as 1234.0 into the id Dhan expects."""
+    if raw is None:
+        return None
+    text = str(raw).strip()
+    if text.lower() in {"", "nan", "none"}:
+        return None
+    try:
+        return str(int(float(text)))
+    except (TypeError, ValueError):
+        return None
+
+
+def _parse_order(response: Any, order_id: str) -> dict:
+    payload = _payload(response)
+    row = payload
+    if isinstance(payload, list):
+        row = payload[0] if payload else {}
+    if not isinstance(row, dict):
+        row = {}
+    status = str(_first(row, "orderStatus", "order_status", default="") or "").upper()
+    if not status:
+        status = "UNKNOWN"
+    found = str(_first(row, "orderId", "order_id", default="") or order_id)
+    traded = int(float(_first(row, "filledQty", "tradedQuantity", "filled_qty", default=0) or 0))
     return {
-        "order_id": order_id,
-        "status": "PLACED",
+        "order_id": found,
+        "status": status,
+        "traded_quantity": traded,
         "broker": "dhan",
-        "response": response,
+        "symbol": str(_first(row, "tradingSymbol", "trading_symbol", default="") or ""),
+        "side": str(_first(row, "transactionType", "transaction_type", default="") or ""),
+        "average_price": float(_first(row, "averageTradedPrice", "price", default=0) or 0),
     }
 
 
+async def _finish_placement(response: Any, creds: tuple[str, str] | None, tag: str | None) -> dict:
+    payload = _payload(response)
+    order_id = ""
+    if isinstance(payload, dict):
+        order_id = str(_first(payload, "orderId", "order_id", default="") or "")
+    if not order_id:
+        recovered = {"order_id": "", "status": "UNKNOWN", "traded_quantity": 0, "broker": "dhan"}
+        if tag:
+            try:
+                recovered = await find_order_by_tag(tag, creds)
+            except DhanRequestError:
+                pass
+        return recovered
+    try:
+        return await poll_order(order_id, creds, tag)
+    except DhanRequestError as exc:
+        return {"order_id": order_id, "status": "UNKNOWN", "traded_quantity": 0, "broker": "dhan", "error": str(exc)}
+
+
 _security_ids: dict[str, str] | None = None
+_security_ids_on: str | None = None
 
 
-async def resolve_security_id(symbol: str) -> str | None:
+async def resolve_security_id(symbol: str, creds: tuple[str, str] | None = None) -> str | None:
     """Map an NSE trading symbol to Dhan's security id, or None when it is absent."""
-    global _security_ids
-    if _security_ids is None:
-        _security_ids = await _load_security_ids()
-    return _security_ids.get(symbol.upper().replace(".NS", "").replace(".BO", "").strip())
+    mapping = await security_master(creds)
+    key = symbol.upper().replace(".NS", "").replace(".BO", "").strip()
+    return mapping.get(key)
 
 
-async def _load_security_ids() -> dict[str, str]:
+async def security_master(creds: tuple[str, str] | None = None) -> dict[str, str]:
+    """NSE equity ids, refreshed once each IST date. A user's token is enough."""
+    global _security_ids, _security_ids_on
+    today = now_ist().date().isoformat()
+    if _security_ids is None or _security_ids_on != today:
+        _security_ids = await _load_security_ids(creds)
+        _security_ids_on = today
+    return _security_ids
+
+
+async def _load_security_ids(creds: tuple[str, str] | None = None) -> dict[str, str]:
     """Load the compact NSE equity master. The SDK writes a CSV; it is kept in a temp dir."""
 
     def _fetch() -> Any:
+        client = dhanhq(creds[0], creds[1]) if creds else _sdk_client()
         with tempfile.TemporaryDirectory() as directory:
             filename = f"{directory}/security_id_list.csv"
-            return _sdk_client().fetch_security_list("compact", filename)
+            return client.fetch_security_list("compact", filename)
 
     frame = await run_in_threadpool(_fetch)
     if frame is None or not isinstance(frame, pd.DataFrame) or frame.empty:
@@ -244,9 +470,9 @@ async def _load_security_ids() -> dict[str, str]:
     mapping: dict[str, str] = {}
     for _, row in equity.iterrows():
         symbol = str(row.get("SEM_TRADING_SYMBOL") or "").upper().strip()
-        security_id = row.get("SEM_SMST_SECURITY_ID")
-        if symbol and security_id is not None and str(security_id) != "nan":
-            mapping[symbol] = str(security_id)
+        security_id = normalize_security_id(row.get("SEM_SMST_SECURITY_ID"))
+        if symbol and security_id:
+            mapping[symbol] = security_id
     logger.info("Dhan security master loaded: %s NSE equity symbols", len(mapping))
     return mapping
 
@@ -257,8 +483,8 @@ async def fetch_intraday_candles(symbol: str, security_id: str) -> pd.DataFrame 
     Returns None when Dhan has no bars for this symbol. Columns are
     open, high, low, close, volume.
     """
-    to_date = datetime.now()
-    from_date = to_date - timedelta(days=7)
+    to_date = now_ist()
+    from_date = to_date.replace(hour=0, minute=0, second=0, microsecond=0)
     response = await _call(
         "intraday_minute_data",
         security_id=security_id,

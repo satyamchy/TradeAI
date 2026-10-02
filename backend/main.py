@@ -24,8 +24,20 @@ from app.config import settings
 from app.trading.automation_runner import automation_runner
 
 
+def _refuse_unsafe_production() -> None:
+    if settings.app_env.strip().lower() != "production":
+        return
+    if settings.session_secret == "dev-session-secret-change-me" or len(settings.session_secret) < 16:
+        raise RuntimeError("Set a long SESSION_SECRET before APP_ENV=production")
+    if not settings.credentials_key:
+        raise RuntimeError("Set CREDENTIALS_KEY before APP_ENV=production")
+    if settings.app_debug:
+        raise RuntimeError("Set APP_DEBUG=false before APP_ENV=production")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    _refuse_unsafe_production()
     db.init_db()
     ensure_admin()
     await automation_runner.start()
@@ -45,7 +57,7 @@ app.add_middleware(
     secret_key=settings.session_secret,
     session_cookie="tradex_session",
     same_site="lax",
-    https_only=False,
+    https_only=settings.app_env.strip().lower() == "production",
 )
 app.add_middleware(
     CORSMiddleware,

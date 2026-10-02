@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 
 from app import db
 from app.auth import current_user, encrypt_secret, require_trader
-from app.broker.dhan_gateway import DhanRequestError
+from app.broker.dhan_gateway import CredentialsRequired, DhanRequestError
 from app.broker.paper_ledger import PaperLedgerError
 from app.broker.trading_gateway import gateway_for_user
 
@@ -25,6 +25,8 @@ async def get_funds(request: Request):
     user = current_user(request)
     try:
         balance = await gateway_for_user(user).get_available_balance_inr()
+    except CredentialsRequired as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     except (DhanRequestError, PaperLedgerError) as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     return {"mode": gateway_for_user(user).mode, "available_balance_inr": round(balance, 2)}
@@ -36,6 +38,8 @@ async def get_positions(request: Request):
     user = current_user(request)
     try:
         positions = await gateway_for_user(user).get_open_positions()
+    except CredentialsRequired as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     except (DhanRequestError, PaperLedgerError) as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     return {"mode": gateway_for_user(user).mode, "count": len(positions), "positions": positions}
@@ -47,6 +51,8 @@ async def get_orders(request: Request):
     user = current_user(request)
     try:
         orders = await gateway_for_user(user).get_orders()
+    except CredentialsRequired as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     except (DhanRequestError, PaperLedgerError) as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     return {"mode": gateway_for_user(user).mode, "count": len(orders), "orders": orders}

@@ -7,7 +7,11 @@ const client = axios.create({
 
 export function errorText(error) {
   const detail = error?.response?.data?.detail;
-  return typeof detail === 'string' ? detail : 'Request failed';
+  if (typeof detail === 'string') return detail;
+  if (Array.isArray(detail)) {
+    return detail.map((item) => item?.msg || String(item)).join(' ');
+  }
+  return 'Request failed';
 }
 
 export async function login(username, password) {
@@ -29,8 +33,11 @@ export async function automationStatus() {
   return data;
 }
 
-export async function enableAutomation(methods) {
-  const { data } = await client.post('/api/v1/automation/enable', { methods });
+export async function enableAutomation(methods, tradingIndex) {
+  const { data } = await client.post('/api/v1/automation/enable', {
+    methods,
+    trading_index: tradingIndex || undefined,
+  });
   return data;
 }
 
@@ -51,6 +58,24 @@ export async function funds() {
 
 export async function positions() {
   const { data } = await client.get('/api/v1/account/positions');
+  return data;
+}
+
+export async function accountOrders() {
+  const { data } = await client.get('/api/v1/account/orders');
+  return data;
+}
+
+export async function closePosition(symbol, productType) {
+  const { data } = await client.post('/api/v1/orders/close', {
+    symbol,
+    product_type: productType,
+  });
+  return data;
+}
+
+export async function cancelOrder(orderId) {
+  const { data } = await client.delete(`/api/v1/orders/${orderId}`);
   return data;
 }
 

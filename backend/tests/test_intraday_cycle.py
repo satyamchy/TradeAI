@@ -63,11 +63,13 @@ class PaperAccount:
     async def resolve_security_id(self, symbol: str) -> str:
         return "1001"
 
-    async def place_intraday_order(self, symbol, security_id, side, quantity, price) -> dict:
-        return self.ledger.fill_intraday_order(symbol, security_id, side, quantity, price)
+    async def place_intraday_order(self, symbol, security_id, side, quantity, price, product_type="INTRADAY") -> dict:
+        return self.ledger.fill_intraday_order(
+            symbol, security_id, side, quantity, price, product_type=product_type
+        )
 
-    async def set_last_price(self, symbol: str, last_price: float) -> None:
-        self.ledger.set_last_price(symbol, last_price)
+    async def set_last_price(self, symbol: str, last_price: float, product_type: str = "INTRADAY") -> None:
+        self.ledger.set_last_price(symbol, last_price, product_type)
 
     async def realized_pnl_today_inr(self) -> float:
         return self.ledger.realized_pnl_today_inr()
@@ -77,7 +79,7 @@ def _patch_market(monkeypatch):
     async def prices(symbols):
         return {symbol: 100.0 if symbol == "RELIANCE" else 50.0 for symbol in symbols}
 
-    async def rank(side, exclude=None, limit=None):
+    async def rank(side, exclude=None, limit=None, index=None):
         exclude = exclude or set()
         if side == "short":
             rows = [{"symbol": "TCS", "ltp": 50.0, "score": -2.0}]
@@ -238,6 +240,47 @@ def test_enable_route_stays_off_until_called(tmp_path, monkeypatch):
         disabled = client.post("/api/v1/automation/disable")
         assert disabled.status_code == 200
         assert disabled.json()["enabled"] is False
+
+
+def test_a_later_fill_keeps_the_earlier_one(tmp_path):
+    path = str(tmp_path / "paper.json")
+    first = PaperLedger(path, 100_000)
+    second = PaperLedger(path, 100_000)
+    first.fill_intraday_order("TCS", "1", "BUY", 10, 100)
+    second.fill_intraday_order("INFY", "2", "BUY", 10, 100)
+    saved = PaperLedger(path, 100_000)
+    assert {row["symbol"] for row in saved.open_positions()} == {"INFY", "TCS"}
+
+
+def test_delivery_sell_without_shares_is_rejected(tmp_path):
+    from app.broker.paper_ledger import PaperLedgerError
+
+    ledger = PaperLedger(str(tmp_path / "paper.json"), 100_000)
+    with pytest.raises(PaperLedgerError):
+        ledger.fill_intraday_order("TCS", "1", "SELL", 1, 100, product_type="DELIVERY")
+
+
+def test_security_id_drops_the_decimal():
+    from app.broker.dhan_gateway import normalize_security_id
+
+    assert normalize_security_id("1234.0") == "1234"
+    assert normalize_security_id(1234.0) == "1234"
+
+
+def test_holiday_is_a_closed_session():
+    from app.trading.nse_session import new_entries_blocked, set_holidays
+
+    set_holidays({"2026-10-01"})
+    try:
+        assert not is_nse_cash_session_open(OPEN)
+    finally:
+        set_holidays(set(), "unknown")
+    assert is_nse_cash_session_open(OPEN)
+    set_holidays(set(), "failed")
+    try:
+        assert new_entries_blocked()
+    finally:
+        set_holidays(set(), "unknown")
 
 
 def _tradeable_frame() -> pd.DataFrame:
