@@ -5,7 +5,6 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Protocol, Sequence
-from uuid import UUID
 
 from app.modules.position_monitoring.repository import TriggerRepository
 from app.modules.position_monitoring.schemas import PositionMonitorInput

@@ -1,21 +1,11 @@
 """Pydantic contracts for analysis jobs."""
 
 from datetime import datetime
-from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict
 
 from app.shared.contracts import AnalysisStatus
-
-
-class AnalysisJobSubmission(BaseModel):
-    """Sanitized request data and a caller-generated idempotency key."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    idempotency_key: str = Field(min_length=1, max_length=128)
-    request_payload: dict[str, Any] = Field(default_factory=dict)
 
 
 class AnalysisJobView(BaseModel):
@@ -36,9 +26,3 @@ class AnalysisJobView(BaseModel):
     updated_at: datetime
     started_at: datetime | None = None
     completed_at: datetime | None = None
-
-
-class AnalysisJobHandlerResult(BaseModel):
-    """Handler output is reduced to a reference, not a provider payload."""
-
-    result_reference: str = Field(min_length=1, max_length=500)

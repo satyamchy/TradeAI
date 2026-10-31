@@ -4,12 +4,10 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
-import json
 import re
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any, Protocol
-from uuid import UUID
 
 from app.modules.ai_analysis.schemas import AnalysisProviderOutput, AnalysisProviderRequest
 from app.shared.logging import bind_log_context, get_logger, reset_log_context

@@ -12,7 +12,7 @@ The adapter keeps the upstream memory log, checkpoint cache, and report artifact
 
 The provider pin and candidate core-version pins are in `requirements-tradingagents.txt`. Install with `python -m pip install -r requirements-tradingagents.txt` after the project requirements are installed, then run `python -m pip check`. The project environment initially had LangGraph 1.2.11, LangChain Core 1.6.3, and pandas 3.0.5; the tagged release requires at least 1.2.12, 1.6.5, and 3.0.6 respectively. Provider code tests use fakes and do not require API credentials. No real LLM smoke call is part of the default test suite.
 
-The Module 2 service is not yet connected to the candidate API or FastAPI background worker. That cross-module/API wiring belongs to Phase 3 after all five modules pass their independent tests.
+The Stock Selection → AI Analysis workflow is connected to the candidate service and the FastAPI job API. `POST /api/v1/analysis/jobs` accepts a typed `AnalysisRequest`; supply its idempotency key in the `Idempotency-Key` header. FastAPI lifespan starts one in-process worker using `handle_job`. Check progress at `GET /api/v1/analysis/jobs/{analysis_id}` and retrieve the normalized result from `GET /api/v1/analysis/results/{analysis_id}`. Module 2 remains provider-lazy until a job is executed. No live-provider smoke call is part of the default tests.
 
 ## Tests
 

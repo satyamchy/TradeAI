@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import hashlib
 import re
 from datetime import datetime, timezone
-from decimal import Decimal
 from typing import Protocol
 from uuid import UUID, uuid4
 
@@ -36,6 +34,7 @@ class ExecutionServiceProtocol(Protocol):
     async def execute_order(self, request: ExecutionRequest, *, owner_id: int) -> ExecutionResult: ...
     async def get_order_status(self, order_id: UUID, *, owner_id: int) -> ExecutionResult | None: ...
     async def cancel_order(self, order_id: UUID, *, owner_id: int) -> ExecutionResult: ...
+    async def reconcile_order(self, order_id: UUID, *, owner_id: int) -> ExecutionResult: ...
     async def reconcile_orders(self, *, owner_id: int) -> ReconciliationSummary: ...
 
 

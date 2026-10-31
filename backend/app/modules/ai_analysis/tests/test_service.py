@@ -1,17 +1,17 @@
 import asyncio
 from datetime import date, datetime, timedelta, timezone
 from uuid import uuid4
+from zoneinfo import ZoneInfo
 
 import pytest
 from sqlalchemy import select
 
 from app.jobs.models import AnalysisJobRecord
-from app.jobs.service import AnalysisJobManager
 from app.modules.ai_analysis.providers import (
     PermanentProviderFailure,
     TransientProviderFailure,
 )
-from app.modules.ai_analysis.repository import AnalysisRunRecord, SqlAlchemyAnalysisRunRepository
+from app.modules.ai_analysis.repository import AnalysisRunRecord
 from app.modules.ai_analysis.schemas import (
     AnalysisProviderOutput,
     PortfolioSnapshotReference,
@@ -217,7 +217,7 @@ def test_other_provider_and_future_date_are_rejected(analysis_context, make_anal
             owner_id=1,
             idempotency_key="provider",
         ))
-    future_date = datetime.now(timezone.utc).date() + timedelta(days=1)
+    future_date = datetime.now(ZoneInfo("Asia/Kolkata")).date() + timedelta(days=1)
     with pytest.raises(InvalidAnalysisRequest, match="future"):
         asyncio.run(service.request_analysis(
             request_for(analysis_context["candidate"].candidate_id, analysis_date=future_date),

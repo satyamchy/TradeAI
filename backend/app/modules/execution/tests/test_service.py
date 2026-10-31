@@ -8,7 +8,6 @@ from sqlalchemy import func, select
 
 from app.modules.execution.models import ExecutionEventRecord, ExecutionOrderRecord
 from app.modules.execution.service import (
-    ExecutionService,
     IntentUnavailable,
     InvalidExecutionRequest,
     LiveExecutionDisabled,

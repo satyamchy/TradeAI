@@ -15,22 +15,26 @@ from starlette.middleware.sessions import SessionMiddleware
 from app import db
 from app.api.v1.router import router as api_v1_router
 from app.auth import ensure_admin
-from app.jobs.models import AnalysisJobRecord  # noqa: F401 - register model metadata
 from app.jobs.repository import SqlAlchemyAnalysisJobRepository
-from app.jobs.service import AnalysisHandler, AnalysisJobManager, AnalysisJobWorker
+from app.jobs.service import AnalysisJobManager, AnalysisJobWorker
+from app.modules.ai_analysis.profiles import default_profile_registry
+from app.modules.ai_analysis.providers import AnalysisProvider, TradingAgentsProvider
+from app.modules.ai_analysis.repository import SqlAlchemyAnalysisRunRepository
+from app.modules.ai_analysis.service import AIAnalysisService
 from app.modules.stock_selection.instrument_master import LocalNseInstrumentResolver
 from app.modules.stock_selection.repository import SqlAlchemyCandidateRepository
 from app.modules.stock_selection.service import StockSelectionService
 from app.shared.config import settings
 from app.shared.database import create_engine_for_database, create_session_factory
 from app.shared.logging import bind_log_context, configure_logging, reset_log_context
+from app.workflows.analysis import StockSelectionAnalysisWorkflow
 
 
 def create_app(
     *,
-    analysis_handler: AnalysisHandler | None = None,
+    analysis_provider: AnalysisProvider | None = None,
 ) -> FastAPI:
-    """Create the one application and inject shared infrastructure at startup."""
+    """Create the app and compose lazy services during its single lifespan."""
     app_settings = settings
     configure_logging()
 
@@ -48,18 +52,34 @@ def create_app(
             SqlAlchemyCandidateRepository(sessions),
             LocalNseInstrumentResolver(instrument_master_path),
         )
-        worker = AnalysisJobWorker(manager, analysis_handler) if analysis_handler else None
+        provider = analysis_provider or TradingAgentsProvider(
+            data_root=app_settings.tradingagents_data_dir,
+            environment=f"{app_settings.app_env}-{app_settings.trading_mode}",
+        )
+        analysis_service = AIAnalysisService(
+            jobs=manager,
+            repository=SqlAlchemyAnalysisRunRepository(sessions),
+            candidates=stock_selection_service,
+            profiles=default_profile_registry(app_settings),
+            provider=provider,
+        )
+        stock_selection_analysis_workflow = StockSelectionAnalysisWorkflow(
+            stock_selection_service,
+            analysis_service,
+        )
+        worker = AnalysisJobWorker(manager, analysis_service.handle_job)
         app.state.db_engine = engine
         app.state.db_session_factory = sessions
         app.state.analysis_job_manager = manager
         app.state.stock_selection_service = stock_selection_service
+        app.state.analysis_service = analysis_service
+        app.state.stock_selection_analysis_workflow = stock_selection_analysis_workflow
         app.state.analysis_job_worker = worker
         ensure_admin()
 
         runner = None
         try:
-            if worker is not None:
-                await worker.start()
+            await worker.start()
             from app.harness import get_automation_runner
 
             runner = get_automation_runner()
@@ -68,8 +88,7 @@ def create_app(
         finally:
             if runner is not None:
                 await runner.stop()
-            if worker is not None:
-                await worker.stop()
+            await worker.stop()
             engine.dispose()
 
     app = FastAPI(

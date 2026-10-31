@@ -12,7 +12,6 @@ from app.modules.ai_analysis.providers import TradingAgentsProvider, normalize_d
 from app.modules.ai_analysis.schemas import (
     AnalysisProfile,
     AnalysisProviderRequest,
-    PortfolioPosition,
     PortfolioSnapshotReference,
 )
 from app.shared.contracts import AnalysisHorizon, Instrument

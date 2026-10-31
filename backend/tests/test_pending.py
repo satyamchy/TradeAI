@@ -1,6 +1,5 @@
 """A suggestion or delivery request is not an order until Execute."""
 
-import pytest
 from fastapi.testclient import TestClient
 
 from app.broker import dhan_gateway

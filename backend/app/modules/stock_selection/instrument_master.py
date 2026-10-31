@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import csv
 import re
-from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Protocol

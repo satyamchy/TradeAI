@@ -29,8 +29,6 @@ class FakeExistingTradingGateway:
 
 
 def test_adapter_uses_the_injected_single_gateway_and_maps_filled_paper_order(execution_context):
-    from app.modules.execution.tests.conftest import execution_request
-
     gateway = FakeExistingTradingGateway()
     adapter = ExistingTradingGatewayAdapter(gateway)
     intent = execution_context["intent"]
@@ -44,4 +42,3 @@ def test_adapter_uses_the_injected_single_gateway_and_maps_filled_paper_order(ex
     assert gateway.submissions[0]["side"] == "BUY"
     assert gateway.submissions[0]["product_type"] == "INTRADAY"
     assert len(gateway.submissions[0]["tag"]) == 16
-

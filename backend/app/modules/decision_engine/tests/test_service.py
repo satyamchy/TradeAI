@@ -8,7 +8,6 @@ from sqlalchemy import func, select
 
 from app.modules.decision_engine.models import DecisionRecord, OrderIntentRecord
 from app.modules.decision_engine.schemas import (
-    AccountRiskSnapshot,
     ConfirmedPosition,
     EvaluateTradeRequest,
     ExitEvaluationRequest,

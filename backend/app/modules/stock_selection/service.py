@@ -27,7 +27,6 @@ from app.shared.contracts import (
     CandidateRejectionCode,
     CandidateValidationStatus,
     CreateCandidatesRequest,
-    Instrument,
     SelectionMode,
 )
 from app.shared.logging import bind_log_context, get_logger, reset_log_context

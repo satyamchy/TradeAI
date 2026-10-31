@@ -1,7 +1,23 @@
+import time
+from datetime import date
+
 from fastapi.testclient import TestClient
 
 from app.application import create_app
 from app.config import settings
+from app.modules.ai_analysis.schemas import AnalysisProviderOutput
+from app.shared.contracts import ProviderName
+
+
+class StructuralAnalysisProvider:
+    version = "structural-fake"
+
+    async def analyze(self, request):
+        return AnalysisProviderOutput(
+            provider_version=self.version,
+            source_rating="Hold",
+            reports={"portfolio_decision": "Rating: Hold"},
+        )
 
 
 def test_startup_compatibility_routes_and_analysis_job_contract(tmp_path, monkeypatch):
@@ -23,7 +39,7 @@ def test_startup_compatibility_routes_and_analysis_job_contract(tmp_path, monkey
         return set()
 
     monkeypatch.setattr("app.market.nse_public.load_holidays", no_network_holidays)
-    app = create_app()
+    app = create_app(analysis_provider=StructuralAnalysisProvider())
 
     with TestClient(app) as client:
         assert client.get("/api/v1/auth/session").status_code == 401
@@ -48,6 +64,9 @@ def test_startup_compatibility_routes_and_analysis_job_contract(tmp_path, monkey
             "/api/v1/account/funds",
             "/api/v1/screener/nifty50",
             "/api/v1/stock-selection/candidates",
+            "/api/v1/analysis/jobs",
+            "/api/v1/analysis/jobs/{analysis_id}",
+            "/api/v1/analysis/results/{analysis_id}",
             "/api/v1/orders/intraday",
             "/api/v1/suggestions",
             "/api/v1/events",
@@ -56,26 +75,6 @@ def test_startup_compatibility_routes_and_analysis_job_contract(tmp_path, monkey
             "/api/v1/orders/intraday",
             json={"symbol": "TESTCO", "side": "BUY", "quantity": 1},
         ).status_code == 403
-
-        created = client.post(
-            "/api/v1/analysis/jobs",
-            json={
-                "idempotency_key": "same-analysis-request",
-                "request_payload": {"symbol": "TESTCO", "api_key": "never-persist"},
-            },
-        )
-        duplicate = client.post(
-            "/api/v1/analysis/jobs",
-            json={"idempotency_key": "same-analysis-request", "request_payload": {"symbol": "TESTCO"}},
-        )
-        assert created.status_code == 202
-        assert duplicate.status_code == 202
-        assert created.json()["analysis_id"] == duplicate.json()["analysis_id"]
-        assert created.json()["status"] == "PENDING"
-        assert "never-persist" not in created.text
-        job = client.get(f"/api/v1/analysis/jobs/{created.json()['analysis_id']}")
-        assert job.status_code == 200
-        assert job.json()["attempt_count"] == 0
 
         trader = client.post(
             "/api/v1/users",
@@ -106,6 +105,39 @@ def test_startup_compatibility_routes_and_analysis_job_contract(tmp_path, monkey
         candidate_id = selection.json()["candidates"][0]["candidate_id"]
         assert client.get(f"/api/v1/stock-selection/candidates/{candidate_id}").status_code == 200
         assert len(client.get("/api/v1/stock-selection/candidates").json()) == 1
+        analysis_request = {
+            "candidate_id": candidate_id,
+            "provider": ProviderName.TRADING_AGENTS.value,
+            "analysis_date": date.today().isoformat(),
+            "horizon": "INTRADAY",
+            "analysis_profile_key": "INTRADAY_RESEARCH",
+            "analysis_profile_version": "1",
+        }
+        created = client.post(
+            "/api/v1/analysis/jobs",
+            json=analysis_request,
+            headers={"Idempotency-Key": "same-analysis-request"},
+        )
+        duplicate = client.post(
+            "/api/v1/analysis/jobs",
+            json=analysis_request,
+            headers={"Idempotency-Key": "same-analysis-request"},
+        )
+        assert created.status_code == 202
+        assert duplicate.status_code == 202
+        assert created.json()["analysis_id"] == duplicate.json()["analysis_id"]
+        analysis_id = created.json()["analysis_id"]
+        deadline = time.monotonic() + 3
+        job = client.get(f"/api/v1/analysis/jobs/{analysis_id}")
+        while job.json()["status"] in {"PENDING", "RUNNING"} and time.monotonic() < deadline:
+            time.sleep(0.02)
+            job = client.get(f"/api/v1/analysis/jobs/{analysis_id}")
+        assert job.status_code == 200
+        assert job.json()["status"] == "COMPLETED"
+        result = client.get(f"/api/v1/analysis/results/{analysis_id}")
+        assert result.status_code == 200
+        assert result.json()["source_rating"] == "Hold"
+        assert result.json()["reports"]["portfolio_decision"] == "Rating: Hold"
         client.post("/api/v1/auth/logout")
         client.post(
             "/api/v1/auth/login",
@@ -131,7 +163,7 @@ def test_startup_compatibility_routes_and_analysis_job_contract(tmp_path, monkey
         assert client.post(
             "/api/v1/automation/enable", json={"methods": ["intraday_long"]}
         ).status_code == 403
-        assert client.get(f"/api/v1/analysis/jobs/{created.json()['analysis_id']}").status_code == 404
+        assert client.get(f"/api/v1/analysis/jobs/{analysis_id}").status_code == 404
 
         preflight = client.options(
             "/api/v1/auth/session",

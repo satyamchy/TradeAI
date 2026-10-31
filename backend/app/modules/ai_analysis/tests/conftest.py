@@ -11,11 +11,9 @@ from app.modules.ai_analysis.service import AIAnalysisService
 from app.jobs.repository import SqlAlchemyAnalysisJobRepository
 from app.jobs.service import AnalysisJobManager
 from app.shared.contracts import (
-    AnalysisHorizon,
     Candidate,
     CandidateValidationStatus,
     Instrument,
-    ProviderName,
     SelectionMode,
 )
 from app.shared.database import create_engine_for_database, create_session_factory
