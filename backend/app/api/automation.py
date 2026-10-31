@@ -14,7 +14,7 @@ from app import db
 from app.auth import current_user, require_admin, require_trader
 from app.broker.trading_gateway import gateway_for_user
 from app.trading.automation_runner import ALLOWED_METHODS, CYCLE_HISTORY, automation_runner
-from app.trading.intraday_cycle import run_intraday_cycle
+from app.workflows.intraday import run_intraday_cycle
 from app.trading.nse_session import is_nse_cash_session_open, is_past_entry_cutoff, is_square_off_time, now_ist
 from app.trading.nifty50 import INDEX_CHOICES, canonical_index
 from app.trading.pending import set_user_automation

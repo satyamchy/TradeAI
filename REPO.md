@@ -16,6 +16,7 @@ Set these in `backend/.env` before the process starts. `APP_ENV=production` refu
 | `CREDENTIALS_KEY` | A Fernet key. Required. |
 | `ADMIN_PASSWORD` | Set before the first boot, when `tradex.db` has no users. |
 | `TRADING_MODE` | `paper` until a trader's own Dhan token is saved and you intend to send orders. Then `live`, and restart. |
+| `LIVE_TRADING_ENABLED` | `false` through integration, failure-recovery, and paper E2E. Live sending requires both `TRADING_MODE=live` and this gate to be `true`. |
 | `FRONTEND_ORIGIN` | The public desk origin, for example `https://desk.example.com`. The login cookie is HTTPS-only in production. |
 | `DHAN_CLIENT_ID`, `DHAN_ACCESS_TOKEN` | Process token for the security master. Live orders still use the token saved on Settings. |
 
@@ -68,11 +69,11 @@ The same process flattens intraday positions from 15:15 IST while the NSE cash s
 
 ## Before the first live session
 
-1. Boot once in `paper` and sign in as the admin created from `ADMIN_PASSWORD`.
+1. Boot once in `paper` with `LIVE_TRADING_ENABLED=false` and sign in as the admin created from `ADMIN_PASSWORD`.
 2. Create a trader. An admin cannot place orders.
 3. On that trader, save the Dhan client id and a token generated on Dhan Web. Whitelist this host's static IP on that Dhan account first. The steps are in [docs/PROJECT_SETUP.md](docs/PROJECT_SETUP.md). Live orders refuse to run without that pair.
 4. Set a small daily-loss cap on Settings.
-5. Switch `TRADING_MODE=live` and restart the one API process.
+5. After the release validation gates pass, set `APP_ENV=production`, `TRADING_MODE=live`, and `LIVE_TRADING_ENABLED=true`, then restart the one API process.
 6. Confirm the desk shows a live banner, cash, and positions from that Dhan account.
 
 NSE public data supplies the holiday calendar and the selected index. If the holiday list cannot be loaded, new entries stay off. Exits still run. Order prices come from Dhan quotes, not from NSE.

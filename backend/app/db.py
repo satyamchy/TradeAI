@@ -8,94 +8,32 @@ place orders.
 from __future__ import annotations
 
 import sqlite3
+from contextlib import contextmanager
 from datetime import datetime
+from pathlib import Path
+from typing import Iterator
 from zoneinfo import ZoneInfo
 
 from app.config import settings
 
 IST = ZoneInfo("Asia/Kolkata")
 
-_SCHEMA = """
-CREATE TABLE IF NOT EXISTS users (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    username TEXT NOT NULL UNIQUE,
-    password_hash TEXT NOT NULL,
-    role TEXT NOT NULL,
-    disabled INTEGER NOT NULL DEFAULT 0,
-    dhan_client_id TEXT,
-    dhan_access_token TEXT,
-    automation_state TEXT NOT NULL DEFAULT 'off',
-    automation_methods TEXT NOT NULL DEFAULT '[]',
-    created_at TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS pending_orders (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER NOT NULL,
-    source TEXT NOT NULL,
-    product TEXT NOT NULL,
-    symbol TEXT NOT NULL,
-    side TEXT NOT NULL,
-    quantity INTEGER NOT NULL,
-    price REAL NOT NULL,
-    status TEXT NOT NULL,
-    detail TEXT NOT NULL DEFAULT '',
-    created_at TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS order_events (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER NOT NULL,
-    created_at TEXT NOT NULL,
-    action TEXT NOT NULL,
-    symbol TEXT,
-    side TEXT,
-    quantity INTEGER,
-    product TEXT,
-    mode TEXT NOT NULL,
-    status TEXT NOT NULL,
-    detail TEXT NOT NULL DEFAULT ''
-);
-
-CREATE TABLE IF NOT EXISTS risk_settings (
-    id INTEGER PRIMARY KEY CHECK (id = 1),
-    max_positions INTEGER NOT NULL,
-    capital_per_trade_pct REAL NOT NULL,
-    cash_reserve_pct REAL NOT NULL,
-    take_profit_pct REAL NOT NULL,
-    stop_loss_pct REAL NOT NULL,
-    max_daily_loss_inr REAL NOT NULL,
-    screener_limit INTEGER NOT NULL,
-    cycle_interval_seconds INTEGER NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS dhan_process_credential (
-    id INTEGER PRIMARY KEY CHECK (id = 1),
-    access_token TEXT NOT NULL,
-    refreshed_at TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS protective_stops (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER NOT NULL,
-    symbol TEXT NOT NULL,
-    product TEXT NOT NULL,
-    quantity INTEGER NOT NULL,
-    stop_order_id TEXT,
-    exit_side TEXT NOT NULL,
-    trigger_price REAL NOT NULL,
-    status TEXT NOT NULL,
-    created_at TEXT NOT NULL
-);
-"""
-
-
-def _connect() -> sqlite3.Connection:
+@contextmanager
+def _connect() -> Iterator[sqlite3.Connection]:
+    """Yield one legacy CRUD connection and always close it on exit."""
     conn = sqlite3.connect(_db_path(), timeout=30)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA busy_timeout=30000")
-    return conn
+    try:
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA busy_timeout=30000")
+        conn.execute("PRAGMA foreign_keys=ON")
+        yield conn
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
 
 
 def _db_path() -> str:
@@ -112,23 +50,11 @@ def _resolve_path(path: str) -> str:
 
 
 def init_db() -> None:
-    """Create the tables if they are missing, then add columns from later versions."""
-    with _connect() as conn:
-        conn.executescript(_SCHEMA)
-        _migrate(conn)
+    """Run the single Alembic schema authority on the configured SQLite file."""
+    backup_dir = Path(__file__).resolve().parents[1] / "data" / "backups"
+    from app.shared.migrations import migrate_database
 
-
-def _migrate(conn: sqlite3.Connection) -> None:
-    user_cols = {row[1] for row in conn.execute("PRAGMA table_info(users)")}
-    if "trading_index" not in user_cols:
-        conn.execute("ALTER TABLE users ADD COLUMN trading_index TEXT NOT NULL DEFAULT 'NIFTY 50'")
-    pending_cols = {row[1] for row in conn.execute("PRAGMA table_info(pending_orders)")}
-    if "correlation_id" not in pending_cols:
-        conn.execute("ALTER TABLE pending_orders ADD COLUMN correlation_id TEXT")
-    if "broker_order_id" not in pending_cols:
-        conn.execute("ALTER TABLE pending_orders ADD COLUMN broker_order_id TEXT")
-    if "dhan_token_refreshed_at" not in user_cols:
-        conn.execute("ALTER TABLE users ADD COLUMN dhan_token_refreshed_at TEXT")
+    migrate_database(_db_path(), backup_dir=backup_dir)
 
 
 def _now() -> str:

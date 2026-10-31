@@ -36,6 +36,10 @@ class CredentialsRequired(DhanRequestError):
     """Live account calls need the trader's own saved Dhan token."""
 
 
+class LiveExecutionDisabled(DhanRequestError):
+    """The explicit application safety gate blocks mutating broker calls."""
+
+
 _TERMINAL = {"TRADED", "REJECTED", "CANCELLED", "EXPIRED"}
 _WORKING = {"PENDING", "TRANSIT", "PART_TRADED", "OPEN"}
 
@@ -65,6 +69,8 @@ async def _call(method_name: str, *args: Any, creds: tuple[str, str] | None = No
     `creds` is (client_id, access_token) for one user. Without it, the
     process-level Dhan settings are used for market data.
     """
+    if method_name in {"place_order", "cancel_order"} and not settings.live_execution_allowed:
+        raise LiveExecutionDisabled("Live broker execution is disabled by LIVE_TRADING_ENABLED")
     try:
         client = dhanhq(creds[0], creds[1]) if creds else _sdk_client()
         method = getattr(client, method_name)

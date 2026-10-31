@@ -23,13 +23,15 @@ python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().d
 
 Replace `SESSION_SECRET` with a long random string. Set `ADMIN_PASSWORD`. Leave `TRADING_MODE=paper`.
 
+Keep `LIVE_TRADING_ENABLED=false` in development. Live order placement also requires `APP_ENV=production` and the explicit gate `LIVE_TRADING_ENABLED=true`; do not enable it until the integration and paper-trading release gates pass. For production configuration, use `backend/.env.production.example` as a reference and provide secrets through the host's protected secret store.
+
 Start the API:
 
 ```text
 python main.py
 ```
 
-The first start creates `backend/tradex.db`. If that file has no users, it creates the admin from `ADMIN_USERNAME` and `ADMIN_PASSWORD`. If accounts already exist, those two variables are ignored. Delete `tradex.db` and start again to recreate the first admin. Do not commit `.env` or `tradex.db`.
+The database remains `backend/tradex.db` and is initialized/upgraded by Alembic. Existing unversioned databases are backed up under `backend/data/backups/` before adoption; use a verified backup if a migration is interrupted. If the database has no users, startup creates the admin from `ADMIN_USERNAME` and `ADMIN_PASSWORD`. Existing accounts are preserved. Do not commit `.env`, the database, or backups.
 
 ## 2. Frontend
 

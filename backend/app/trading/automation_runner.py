@@ -17,7 +17,7 @@ from datetime import datetime
 
 from app.broker.trading_gateway import TradingGateway
 from app.config import settings
-from app.trading.intraday_cycle import run_intraday_cycle
+from app.workflows.intraday import run_intraday_cycle
 from app.trading.nse_session import (
     is_nse_cash_session_open,
     is_past_entry_cutoff,

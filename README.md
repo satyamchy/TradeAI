@@ -40,6 +40,7 @@ Open `backend/.env` and set these before the first start:
 | `SESSION_SECRET` | A long random string. It signs the login cookie. |
 | `CREDENTIALS_KEY` | A Fernet key. Traders save a Dhan client id and access token from Settings. Those values are encrypted with this key. |
 | `TRADING_MODE` | `paper` until you intend to send orders to the exchange. |
+| `LIVE_TRADING_ENABLED` | Keep `false` during development, validation, and paper testing. Live requests require `APP_ENV=production`, `TRADING_MODE=live`, and this separate gate to be `true`. |
 
 Generate the Fernet key from the activated virtualenv:
 
@@ -64,7 +65,7 @@ Start the API:
 python main.py
 ```
 
-The first start creates `backend/tradex.db` and, if that file has no users, the admin from `ADMIN_USERNAME` and `ADMIN_PASSWORD`. If the database already has accounts, those two variables are ignored. Delete `tradex.db` and start again to recreate the first admin. The file is gitignored. Relative database and ledger paths are resolved from the `backend` directory.
+The database remains at `backend/tradex.db`. Startup initializes or upgrades it through Alembic. Before migrating an existing unversioned database, TradeX creates a SQLite online backup under `backend/data/backups/`; the upgrade path has been rehearsed against a copy. If the database has no users, startup creates the admin from `ADMIN_USERNAME` and `ADMIN_PASSWORD`; existing accounts are preserved. The database and backups are gitignored. Relative database and ledger paths are resolved from the `backend` directory.
 
 ### 2. Frontend
 
@@ -87,7 +88,11 @@ Sign in as the admin. Create a trader from Users. An admin does not place orders
 
 ### Paper and live
 
-`TRADING_MODE=paper` fills orders inside this process. Prices still come from Dhan when a token is configured. `TRADING_MODE=live` sends orders with that trader's saved Dhan token. The mode is fixed when the process starts. Enabling automation does not switch paper to live. Change the variable, then restart `python main.py`.
+`TRADING_MODE=paper` fills orders inside this process. Prices still come from Dhan when a token is configured. Live execution is fail-closed unless all three settings are explicit: `APP_ENV=production`, `TRADING_MODE=live`, and `LIVE_TRADING_ENABLED=true`. Keep the gate false until the system has passed module integration, failure-recovery, and paper end-to-end validation. The settings are read at process startup. Enabling automation does not switch paper to live.
+
+`backend/.env.example` is the development profile. `backend/.env.production.example` documents production-only settings; copy it to the protected host `.env` and provide secrets through the host's secret store. Neither example contains production credentials.
+
+The modular application structure is in `backend/app/modules/`, with cross-module orchestration under `workflows/` and scheduling under `harness/`. Phase 1 status and migration evidence are in [.codex/tradeai_sdd_docs/docs/migration/baseline-report.md](.codex/tradeai_sdd_docs/docs/migration/baseline-report.md), [.codex/tradeai_sdd_docs/docs/migration/restructuring-plan.md](.codex/tradeai_sdd_docs/docs/migration/restructuring-plan.md), and [.codex/tradeai_sdd_docs/implementation-status.md](.codex/tradeai_sdd_docs/implementation-status.md).
 
 A Dhan access token expires after 24 hours. While this process is running it renews the saved token before expiry. If the process is stopped until the token is already dead, paste a new one on Settings.
 

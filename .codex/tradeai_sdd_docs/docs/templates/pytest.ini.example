@@ -1,0 +1,12 @@
+[pytest]
+testpaths = tests
+addopts = -ra -m "not external and not slow"
+asyncio_mode = auto
+markers =
+    structure: package/import/application startup tests
+    unit: isolated module unit tests
+    integration: tests crossing module boundaries or using SQLite repositories
+    regression: tests protecting pre-existing TradeAI behavior
+    e2e: full paper-trading lifecycle tests
+    external: tests requiring real provider/broker/data credentials or network access
+    slow: long-running tests that are not part of the fast local loop
