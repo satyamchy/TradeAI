@@ -1,7 +1,7 @@
 ﻿# TradeX — Implementation Status Board
 
 **Updated:** 2026-10-31  
-**Overall status:** Phase 0 and Phase 1 complete. Phase 1 delivers structure and shared infrastructure only; business module implementation and trading integrations remain pending.
+**Overall status:** Phase 0, Phase 1, and Phase 2 are complete. All five module services have independent behavioral tests. Cross-module workflows, route wiring, and paper lifecycle validation remain pending.
 
 ## Phase status
 
@@ -11,22 +11,22 @@
 | 1A | Project structure and ownership | COMPLETE | Five inert module packages, typed contracts, workflows, harness, jobs, shared infrastructure, API v1 composition, and compatibility launcher exist. |
 | 1B | Shared infrastructure and database foundation | COMPLETE | Alembic revisions 001–003; SQLAlchemy sessions; safe legacy adoption; analysis jobs; centralized config, live gate, and structured logging. |
 | 1C | Structural and regression testing | COMPLETE | Regression, module, migration, import, startup, API/CORS, and frontend build evidence recorded below. |
-| 2 | Individual module implementation | NOT_STARTED | Implement one module at a time in the sequence below; keep each provider/broker dependency injected. |
+| 2 | Individual module implementation | COMPLETE | Modules 1–5 implemented in order and tested separately with fake dependencies and temporary SQLite. Evidence is in Phase 2 verification below. |
 | 3 | Module-by-module integration | NOT_STARTED | Add pairwise boundary tests only after each module's independent tests pass. |
 | 4 | Integration and failure-recovery testing | NOT_STARTED | Exercise idempotency, partial/rejected/unknown broker outcomes and recovery paths with fakes. |
 | 5 | End-to-end paper trading | NOT_STARTED | Validate the complete lifecycle in paper mode; live execution remains disabled until all gates pass. |
 
 ## Module status
 
-\`STRUCTURED\` means the package, contract, public service interface, README, and isolated test scaffold exist. It does not mean the business capability is implemented.
+\`INDEPENDENTLY_TESTED\` means isolated business behavior passed its own tests. It does not imply workflow integration, real provider execution, or end-to-end paper trading.
 
 | Module | Status | Evidence / next work |
 |---|---|---|
-| 1. Stock Selection | STRUCTURED | Import/interface scaffold exists. Implement screening and candidate selection, then expand isolated tests. |
-| 2. AI Analysis | STRUCTURED | Provider-neutral job contract exists; no TradingAgents or LangGraph analysis handler is connected. Later inspect and pin a compatible external release without editing its source. |
-| 3. Decision & Risk Engine | STRUCTURED | Provider-neutral contract exists and import-boundary test passes. Implement strategies, sizing, risk checks, and approved order-intent generation. |
-| 4. Trade Execution | STRUCTURED | Public contract exists; current Dhan and paper-ledger path remains authoritative. Implement validation, idempotency, reconciliation, and fill-state tracking behind it. |
-| 5. Position Monitoring | STRUCTURED | Public contract/import test exists. Implement deterministic position evaluation and emergency exits independent of AI. |
+| 1. Stock Selection | INDEPENDENTLY_TESTED | Manual validation, local instrument resolution, persistence and screener adapter; **12 isolated tests passed**. |
+| 2. AI Analysis | INDEPENDENTLY_TESTED | Profiles, lazy pinned v0.7.1 adapter, normalized/persisted results and job handler; **20 isolated tests passed**. Real paid-provider smoke and FastAPI worker wiring are deferred. |
+| 3. Decision & Risk Engine | INDEPENDENTLY_TESTED | Provider-neutral sizing, risk checks, idempotent approved intents and deterministic exits; **15 isolated tests passed**. |
+| 4. Trade Execution | INDEPENDENTLY_TESTED | Persisted-intent validation, idempotency, partial/rejected/unknown states, cancellation and reconciliation; **8 isolated tests passed**. No live order was sent. |
+| 5. Position Monitoring | INDEPENDENTLY_TESTED | Stop/target/time/data-health evaluation and trigger deduplication; **6 isolated tests passed**. Returns candidates only. |
 
 ## Integration boundaries
 
@@ -64,11 +64,29 @@
 - Existing routes remain mounted through the compatibility surface; frontend source is unchanged. The automation runner, watchdog, Dhan gateway/client path, and SQLite CRUD store remain single existing implementations.
 - Live execution is fail-closed by default and tests made no live broker calls or paid LLM calls. No TradingAgents source or dependency was changed.
 
+## Phase 2 verification evidence
+
+- Modules were implemented and tested in order, each before starting the next. Independent commands/results:
+  - `python -m pytest app/modules/stock_selection/tests -q` — **12 passed**.
+  - `python -m pytest app/modules/ai_analysis/tests -q` — **20 passed**.
+  - `python -m pytest app/modules/decision_engine/tests -q` — **15 passed**.
+  - `python -m pytest app/modules/execution/tests -q` — **8 passed**.
+  - `python -m pytest app/modules/position_monitoring/tests -q` — **6 passed**.
+  - `python -m pytest tests/structure -q` — **8 passed**, one Starlette deprecation warning.
+- Post-install regression suite: `python -m pytest tests -q` — **36 passed**, one Starlette deprecation warning.
+- TradingAgents was pinned to upstream v0.7.1 at commit `3e44faafa042daf953f6ec2422ae36bb1fd4f50f`; LangGraph 1.2.19, LangChain Core 1.7.3, and pandas 3.0.6 installed in the project venv. `python -m pip check` reported no broken requirements.
+- `python -m compileall -q app alembic tests` passed. Fresh and legacy-copy SQLite migration tests reach Alembic revision 008 and preserve legacy records, constraints, and integrity.
+- Tests use fake providers/brokers and temporary SQLite. No Dhan endpoint, live order, paid LLM call, or original `backend/tradex.db` migration occurred. TradingAgents source was not modified.
+- Phase 2 adds module-owned tables in Alembic revisions 004–008. The original React frontend and legacy routes remain unchanged; Module 2 and Modules 3–5 are not yet connected to workflows or existing route handlers.
+
 ## Safety and migration notes
 
 - Original \`backend/tradex.db\` remains at its existing path and was not migrated; its captured backup was used for migration rehearsal.
 - Alembic is the schema-change authority. Legacy \`sqlite3\` CRUD remains as a compatibility interface against the same configured file.
-- \`analysis_jobs\` is the only new application table. Jobs support stable IDs, per-user idempotency, PENDING/RUNNING/COMPLETED/FAILED, sanitized failures, attempt tracking, and transient-only retries. The API persists jobs, but they stay pending until Module 2 provides a handler.
+- Module-owned additive tables are managed by Alembic: analysis jobs, candidate batches/candidates, analysis runs, decisions/approved intents, execution orders/events, and deduplicated monitoring triggers.
+- Jobs support stable IDs, per-user idempotency, PENDING/RUNNING/COMPLETED/FAILED, sanitized failures, attempt tracking, and transient-only retries. The existing API job route remains pending until Phase 3 wires Module 2's handler to the worker.
+- The existing `TradingGateway` remains the only Dhan/paper execution path. Module 4 wraps an injected gateway; it does not create a client or paper ledger. Unknown submission outcomes are retained for reconciliation and are not blindly retried.
+- The five modules remain independently tested and are not integrated. No module imports another module's internal implementation; no new scheduler or watchdog was added.
 - \`LIVE_TRADING_ENABLED\` defaults to false; changing \`TRADING_MODE\` alone cannot enable live execution.
 - Do not treat module imports/scaffolds as functional completion. Do not integrate modules until the owning module's isolated behavioral tests pass.
 
@@ -78,3 +96,4 @@
 |---|---|---|---|
 | 2026-10-31 | 0 | Captured the pre-refactor environment, tests, API behavior, real database schema, ledger checks, and Dhan-test coverage gaps. | [Baseline report](docs/migration/baseline-report.md) |
 | 2026-10-31 | 1A–1C | Added modular structure, shared infrastructure, additive jobs/migrations, compatibility routing, and completed structural/regression verification. | See the verification section and [restructuring plan](docs/migration/restructuring-plan.md). |
+| 2026-10-31 | 2 | Implemented and independently tested Modules 1–5; added the TradingAgents compatibility pins and Alembic revisions 004–008; kept workflow integration deferred. | See Phase 2 verification evidence above. |

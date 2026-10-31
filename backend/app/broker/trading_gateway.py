@@ -73,6 +73,22 @@ class TradingGateway:
             self._paper.reload()
             return self._paper.orders()
 
+    async def poll_order(self, order_id: str, *, tag: str | None = None) -> dict:
+        """Read actual order state through the existing broker/ledger path."""
+        async with self._lock:
+            if self.mode == "live":
+                return await dhan_gateway.poll_order(order_id, self._live_creds(), tag=tag)
+            self._paper.reload()
+            for order in self._paper.orders():
+                if str(order.get("order_id") or "") == order_id:
+                    return {
+                        **order,
+                        "traded_quantity": int(order.get("quantity") or 0)
+                        if str(order.get("status") or "").upper() == "FILLED" else 0,
+                        "average_price": order.get("price"),
+                    }
+            return {"order_id": order_id, "status": "UNKNOWN", "traded_quantity": 0, "broker": "paper"}
+
     async def quote_prices(self, symbols: list[str]) -> dict[str, float]:
         """Dhan last price for each symbol. Omits a name when the quote is missing."""
         if self.mode == "live":

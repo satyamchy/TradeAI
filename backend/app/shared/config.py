@@ -24,9 +24,15 @@ class Settings(BaseSettings):
     admin_username: str = "admin"
     admin_password: str = ""
     database_path: str = "tradex.db"
+    instrument_master_path: str = "data/instruments/nse_equity.csv"
     frontend_origin: str = "http://localhost:5173"
     groq_api_key: str = ""
     groq_model: str = "llama-3.3-70b-versatile"
+    analysis_quick_provider: str = "groq"
+    analysis_quick_model: str = ""
+    analysis_deep_provider: str = "groq"
+    analysis_deep_model: str = ""
+    tradingagents_data_dir: str = "data/tradingagents"
 
     trading_mode: str = "paper"
     live_trading_enabled: bool = False

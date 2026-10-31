@@ -4,6 +4,11 @@ from alembic import context
 from sqlalchemy import engine_from_config, pool
 
 from app.jobs.models import AnalysisJobRecord  # noqa: F401 - register the new ORM table
+from app.modules.stock_selection.models import CandidateBatchRecord, StockCandidateRecord  # noqa: F401
+from app.modules.ai_analysis.models import AnalysisRunRecord  # noqa: F401
+from app.modules.decision_engine.models import DecisionRecord, OrderIntentRecord  # noqa: F401
+from app.modules.execution.models import ExecutionEventRecord, ExecutionOrderRecord  # noqa: F401
+from app.modules.position_monitoring.models import PositionTriggerRecord  # noqa: F401
 from app.shared.database import Base
 
 config = context.config

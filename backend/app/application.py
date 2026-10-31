@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
@@ -17,6 +18,9 @@ from app.auth import ensure_admin
 from app.jobs.models import AnalysisJobRecord  # noqa: F401 - register model metadata
 from app.jobs.repository import SqlAlchemyAnalysisJobRepository
 from app.jobs.service import AnalysisHandler, AnalysisJobManager, AnalysisJobWorker
+from app.modules.stock_selection.instrument_master import LocalNseInstrumentResolver
+from app.modules.stock_selection.repository import SqlAlchemyCandidateRepository
+from app.modules.stock_selection.service import StockSelectionService
 from app.shared.config import settings
 from app.shared.database import create_engine_for_database, create_session_factory
 from app.shared.logging import bind_log_context, configure_logging, reset_log_context
@@ -37,10 +41,18 @@ def create_app(
         engine = create_engine_for_database(app_settings.database_path)
         sessions = create_session_factory(engine)
         manager = AnalysisJobManager(SqlAlchemyAnalysisJobRepository(sessions))
+        instrument_master_path = Path(app_settings.instrument_master_path).expanduser()
+        if not instrument_master_path.is_absolute():
+            instrument_master_path = Path(__file__).resolve().parents[1] / instrument_master_path
+        stock_selection_service = StockSelectionService(
+            SqlAlchemyCandidateRepository(sessions),
+            LocalNseInstrumentResolver(instrument_master_path),
+        )
         worker = AnalysisJobWorker(manager, analysis_handler) if analysis_handler else None
         app.state.db_engine = engine
         app.state.db_session_factory = sessions
         app.state.analysis_job_manager = manager
+        app.state.stock_selection_service = stock_selection_service
         app.state.analysis_job_worker = worker
         ensure_admin()
 

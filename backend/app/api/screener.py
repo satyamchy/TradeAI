@@ -5,10 +5,18 @@ from typing import Literal
 from fastapi import APIRouter, HTTPException, Query, Request
 
 from app.auth import current_user
+from app.modules.stock_selection.schemas import RankCandidatesRequest
+from app.modules.stock_selection.service import StockSelectionService
 from app.trading.nifty50 import INDEX_CHOICES, canonical_index
-from app.trading.screener import rank_nifty50
 
 router = APIRouter(prefix="/screener", tags=["screener"])
+
+
+def _stock_selection_service(request: Request) -> StockSelectionService:
+    service = getattr(request.app.state, "stock_selection_service", None)
+    if service is None:
+        raise HTTPException(status_code=503, detail="Stock selection service is not available")
+    return service
 
 
 @router.get("/nifty50")
@@ -27,9 +35,16 @@ async def get_nifty50_ranking(
     if index.strip().upper() not in {key.upper() for key in INDEX_CHOICES}:
         raise HTTPException(status_code=400, detail="index must be one of the NSE lists")
     try:
-        candidates = await rank_nifty50(side, limit=limit, index=canonical_index(index))
+        candidates = await _stock_selection_service(request).rank_candidates(
+            RankCandidatesRequest(side=side, limit=limit, index=canonical_index(index))
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
-    return {"side": side, "index": canonical_index(index), "count": len(candidates), "candidates": candidates}
+    return {
+        "side": side,
+        "index": canonical_index(index),
+        "count": len(candidates),
+        "candidates": [candidate.model_dump(exclude_none=True) for candidate in candidates],
+    }

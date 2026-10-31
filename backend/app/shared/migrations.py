@@ -12,7 +12,7 @@ from alembic.config import Config
 from app.shared.database import database_url
 
 BASE_REVISION = "001_legacy_core"
-HEAD_REVISION = "003_analysis_jobs"
+HEAD_REVISION = "008_position_monitoring"
 CORE_TABLE_COLUMNS = {
     "users": {
         "id", "username", "password_hash", "role", "disabled", "dhan_client_id",

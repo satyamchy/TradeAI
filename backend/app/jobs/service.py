@@ -37,11 +37,13 @@ class AnalysisJobManager:
     def submit(
         self,
         *,
+        analysis_id: UUID | None = None,
         owner_id: int,
         idempotency_key: str,
         request_payload: dict[str, Any],
     ) -> AnalysisJobView:
         record = self._repository.create_or_get(
+            analysis_id=str(analysis_id) if analysis_id is not None else None,
             owner_id=owner_id,
             idempotency_key=idempotency_key,
             request_payload=request_payload,
@@ -53,8 +55,17 @@ class AnalysisJobManager:
         record = self._repository.get(str(analysis_id), owner_id=owner_id)
         return _view(record) if record else None
 
-    async def process_next(self, handler: AnalysisHandler) -> AnalysisJobView | None:
-        record = self._repository.claim_next()
+    def get_request_payload(self, analysis_id: UUID, *, owner_id: int) -> dict[str, Any] | None:
+        """Owner-scoped access for an idempotent module to recover its original request."""
+        return self._repository.get_request_payload(str(analysis_id), owner_id=owner_id)
+
+    async def process_next(
+        self,
+        handler: AnalysisHandler,
+        *,
+        analysis_id: UUID | None = None,
+    ) -> AnalysisJobView | None:
+        record = self._repository.claim_next(str(analysis_id) if analysis_id is not None else None)
         if record is None:
             return None
         analysis_id = record.analysis_id

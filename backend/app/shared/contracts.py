@@ -28,6 +28,32 @@ class SelectionMode(StrEnum):
     HIGH_VOLUME = "HIGH_VOLUME"
 
 
+class CandidateBatchStatus(StrEnum):
+    COMPLETED = "COMPLETED"
+    PARTIAL = "PARTIAL"
+    REJECTED = "REJECTED"
+
+
+class CandidateValidationStatus(StrEnum):
+    VALID = "VALID"
+    ANALYSIS_ONLY = "ANALYSIS_ONLY"
+
+
+class CandidateRejectionCode(StrEnum):
+    EMPTY_SYMBOL = "EMPTY_SYMBOL"
+    INVALID_SYMBOL = "INVALID_SYMBOL"
+    DUPLICATE_SYMBOL = "DUPLICATE_SYMBOL"
+    UNKNOWN_SYMBOL = "UNKNOWN_SYMBOL"
+    AMBIGUOUS_SYMBOL = "AMBIGUOUS_SYMBOL"
+
+
+class CandidateRejection(Contract):
+    submitted_symbol: str
+    normalized_symbol: str | None = None
+    code: CandidateRejectionCode
+    message: str
+
+
 class AnalysisHorizon(StrEnum):
     INTRADAY = "INTRADAY"
     SWING = "SWING"
@@ -108,24 +134,29 @@ class Instrument(Contract):
 
 class CreateCandidatesRequest(Contract):
     selection_mode: SelectionMode
-    symbols: list[str] = Field(min_length=1)
+    symbols: list[str] = Field(min_length=1, max_length=100)
     horizon: AnalysisHorizon
     exchange: str = "NSE"
 
 
 class Candidate(Contract):
     candidate_id: UUID
+    batch_id: UUID
     instrument: Instrument
     selection_mode: SelectionMode
     selection_reason: str
-    validation_status: str
+    validation_status: CandidateValidationStatus
+    mapping_source: str
+    resolved_at: datetime
+    created_at: datetime
 
 
 class CandidateBatch(Contract):
     batch_id: UUID
-    status: str
+    status: CandidateBatchStatus
     candidates: list[Candidate]
     rejected_symbols: list[str] = Field(default_factory=list)
+    rejections: list[CandidateRejection] = Field(default_factory=list)
     created_at: datetime
 
 
@@ -140,6 +171,7 @@ class AnalysisRequest(Contract):
     include_portfolio_context: bool = False
     checkpoint_enabled: bool = False
     save_html_report: bool = True
+
 
 
 class AnalysisJobReceipt(Contract):
@@ -159,6 +191,14 @@ class AnalysisResult(Contract):
     provider_version: str
     profile_key: str
     profile_version: str
+    analysis_date: date | None = None
+    horizon: AnalysisHorizon | None = None
+    selected_analysts: list[str] = Field(default_factory=list)
+    quick_provider: str | None = None
+    quick_model: str | None = None
+    deep_provider: str | None = None
+    deep_model: str | None = None
+    portfolio_snapshot_id: UUID | None = None
     status: AnalysisStatus
     source_rating: str | None = None
     direction: AnalysisDirection
@@ -189,17 +229,24 @@ class ApprovedOrderIntent(Contract):
     max_risk_amount: Decimal = Field(ge=0)
     idempotency_key: str = Field(min_length=1, max_length=128)
     expires_at: datetime | None = None
+    reference_price: Decimal | None = None
+    exchange: str = "NSE"
+    segment: str | None = "NSE_EQ"
+    product_type: str = "INTRADAY"
+    intent_kind: str = "ENTRY"
+    position_id: UUID | None = None
 
 
 class DecisionResult(Contract):
     decision_id: UUID
-    analysis_id: UUID
+    analysis_id: UUID | None = None
     symbol: str
     status: DecisionStatus
     strategy_key: str
     strategy_version: str
     reason_codes: list[str] = Field(default_factory=list)
     explanation: str
+    evaluated_at: datetime | None = None
     market_snapshot_at: datetime | None = None
     order_intent: ApprovedOrderIntent | None = None
 
@@ -222,6 +269,8 @@ class ExecutionResult(Contract):
     idempotency_key: str
     submitted_at: datetime
     updated_at: datetime
+    execution_mode: ExecutionMode = ExecutionMode.PAPER
+    rejection_reason: str | None = None
 
 
 class PositionSnapshot(Contract):
@@ -243,3 +292,6 @@ class PositionEvaluation(Contract):
     unrealized_pnl: Decimal | None = None
     trigger_reason: str | None = None
     market_data_at: datetime | None = None
+    trigger_id: UUID | None = None
+    exit_quantity: int | None = Field(default=None, gt=0)
+    is_new_trigger: bool | None = None

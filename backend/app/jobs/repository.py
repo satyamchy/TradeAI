@@ -51,6 +51,7 @@ class SqlAlchemyAnalysisJobRepository:
     def create_or_get(
         self,
         *,
+        analysis_id: str | None = None,
         owner_id: int,
         idempotency_key: str,
         request_payload: dict[str, Any],
@@ -58,7 +59,7 @@ class SqlAlchemyAnalysisJobRepository:
     ) -> AnalysisJobRecord:
         now = utc_now()
         record = AnalysisJobRecord(
-            analysis_id=str(uuid4()),
+            analysis_id=analysis_id or str(uuid4()),
             created_by_user_id=owner_id,
             idempotency_key=idempotency_key,
             status="PENDING",
@@ -96,14 +97,17 @@ class SqlAlchemyAnalysisJobRepository:
             )
             return record
 
-    def claim_next(self) -> AnalysisJobRecord | None:
+    def get_request_payload(self, analysis_id: str, *, owner_id: int) -> dict[str, Any] | None:
+        record = self.get(analysis_id, owner_id=owner_id)
+        return json.loads(record.request_json) if record is not None else None
+
+    def claim_next(self, analysis_id: str | None = None) -> AnalysisJobRecord | None:
         with self._sessions.begin() as session:
-            candidate = session.scalar(
-                select(AnalysisJobRecord)
-                .where(AnalysisJobRecord.status == "PENDING")
-                .order_by(AnalysisJobRecord.created_at, AnalysisJobRecord.analysis_id)
-                .limit(1)
-            )
+            statement = select(AnalysisJobRecord).where(AnalysisJobRecord.status == "PENDING")
+            if analysis_id is not None:
+                statement = statement.where(AnalysisJobRecord.analysis_id == analysis_id)
+            statement = statement.order_by(AnalysisJobRecord.created_at, AnalysisJobRecord.analysis_id).limit(1)
+            candidate = session.scalar(statement)
             if candidate is None:
                 return None
             now = utc_now()

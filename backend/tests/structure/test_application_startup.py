@@ -36,6 +36,10 @@ def test_startup_compatibility_routes_and_analysis_job_contract(tmp_path, monkey
         assert login.headers["x-request-id"] == "structure-test-request"
         assert login.json()["user"]["role"] == "admin"
         assert client.get("/api/v1/users").status_code == 200
+        assert client.post(
+            "/api/v1/stock-selection/candidates",
+            json={"selection_mode": "MANUAL", "symbols": ["TCS"], "horizon": "INTRADAY"},
+        ).status_code == 403
         paths = client.get("/openapi.json").json()["paths"]
         assert {
             "/api/v1/auth/login",
@@ -43,6 +47,7 @@ def test_startup_compatibility_routes_and_analysis_job_contract(tmp_path, monkey
             "/api/v1/automation/status",
             "/api/v1/account/funds",
             "/api/v1/screener/nifty50",
+            "/api/v1/stock-selection/candidates",
             "/api/v1/orders/intraday",
             "/api/v1/suggestions",
             "/api/v1/events",
@@ -72,6 +77,41 @@ def test_startup_compatibility_routes_and_analysis_job_contract(tmp_path, monkey
         assert job.status_code == 200
         assert job.json()["attempt_count"] == 0
 
+        trader = client.post(
+            "/api/v1/users",
+            json={"username": "candidate-trader", "password": "candidate-password", "role": "trader"},
+        )
+        assert trader.status_code == 200
+        client.post("/api/v1/auth/logout")
+        trader_login = client.post(
+            "/api/v1/auth/login",
+            json={"username": "candidate-trader", "password": "candidate-password"},
+        )
+        assert trader_login.status_code == 200
+        selection = client.post(
+            "/api/v1/stock-selection/candidates",
+            json={
+                "selection_mode": "MANUAL",
+                "symbols": ["tcs", "TCS.NS", "UNKNOWN"],
+                "horizon": "INTRADAY",
+            },
+        )
+        assert selection.status_code == 201
+        assert selection.json()["status"] == "PARTIAL"
+        assert selection.json()["candidates"][0]["instrument"]["analysis_ticker"] == "TCS.NS"
+        assert [item["code"] for item in selection.json()["rejections"]] == [
+            "DUPLICATE_SYMBOL",
+            "UNKNOWN_SYMBOL",
+        ]
+        candidate_id = selection.json()["candidates"][0]["candidate_id"]
+        assert client.get(f"/api/v1/stock-selection/candidates/{candidate_id}").status_code == 200
+        assert len(client.get("/api/v1/stock-selection/candidates").json()) == 1
+        client.post("/api/v1/auth/logout")
+        client.post(
+            "/api/v1/auth/login",
+            json={"username": "structural-admin", "password": "structural-password"},
+        )
+
         viewer = client.post(
             "/api/v1/users",
             json={"username": "structural-viewer", "password": "viewer-password", "role": "viewer"},
@@ -83,6 +123,11 @@ def test_startup_compatibility_routes_and_analysis_job_contract(tmp_path, monkey
             json={"username": "structural-viewer", "password": "viewer-password"},
         )
         assert client.get("/api/v1/users").status_code == 403
+        assert client.post(
+            "/api/v1/stock-selection/candidates",
+            json={"selection_mode": "MANUAL", "symbols": ["TCS"], "horizon": "INTRADAY"},
+        ).status_code == 403
+        assert client.get(f"/api/v1/stock-selection/candidates/{candidate_id}").status_code == 404
         assert client.post(
             "/api/v1/automation/enable", json={"methods": ["intraday_long"]}
         ).status_code == 403

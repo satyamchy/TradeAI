@@ -29,6 +29,8 @@ pip install -r requirements.txt
 copy .env.example .env
 ```
 
+The normal application setup does not install or upgrade TradingAgents. For Module 2 provider development, install the separately pinned adapter stack with `pip install -r requirements-tradingagents.txt`, then verify it with `python -m pip check`. The analysis provider is not connected to the request worker yet.
+
 On macOS or Linux, activate with `source .venv/bin/activate` and copy the example with `cp .env.example .env`.
 
 Open `backend/.env` and set these before the first start:
@@ -92,7 +94,7 @@ Sign in as the admin. Create a trader from Users. An admin does not place orders
 
 `backend/.env.example` is the development profile. `backend/.env.production.example` documents production-only settings; copy it to the protected host `.env` and provide secrets through the host's secret store. Neither example contains production credentials.
 
-The modular application structure is in `backend/app/modules/`, with cross-module orchestration under `workflows/` and scheduling under `harness/`. Phase 1 status and migration evidence are in [.codex/tradeai_sdd_docs/docs/migration/baseline-report.md](.codex/tradeai_sdd_docs/docs/migration/baseline-report.md), [.codex/tradeai_sdd_docs/docs/migration/restructuring-plan.md](.codex/tradeai_sdd_docs/docs/migration/restructuring-plan.md), and [.codex/tradeai_sdd_docs/implementation-status.md](.codex/tradeai_sdd_docs/implementation-status.md).
+The modular application structure is in `backend/app/modules/`, with cross-module orchestration under `workflows/` and scheduling under `harness/`. Phase 2 now provides independently tested services for candidate selection, AI analysis, provider-neutral decisions, broker execution, and deterministic position monitoring. Those services are not yet connected through workflows or wired into the existing trading routes; that begins in Phase 3 after the isolated gates. The implementation status and migration evidence are in [.codex/tradeai_sdd_docs/implementation-status.md](.codex/tradeai_sdd_docs/implementation-status.md), [.codex/tradeai_sdd_docs/docs/migration/baseline-report.md](.codex/tradeai_sdd_docs/docs/migration/baseline-report.md), and [.codex/tradeai_sdd_docs/docs/migration/restructuring-plan.md](.codex/tradeai_sdd_docs/docs/migration/restructuring-plan.md).
 
 A Dhan access token expires after 24 hours. While this process is running it renews the saved token before expiry. If the process is stopped until the token is already dead, paste a new one on Settings.
 
