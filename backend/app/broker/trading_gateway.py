@@ -80,7 +80,9 @@ class TradingGateway:
                 return await dhan_gateway.poll_order(order_id, self._live_creds(), tag=tag)
             self._paper.reload()
             for order in self._paper.orders():
-                if str(order.get("order_id") or "") == order_id:
+                if str(order.get("order_id") or "") == order_id or (
+                    tag and str(order.get("correlation_tag") or "") == tag
+                ):
                     return {
                         **order,
                         "traded_quantity": int(order.get("quantity") or 0)
@@ -105,6 +107,17 @@ class TradingGateway:
             if security_id:
                 mapping[normalize_symbol(symbol)] = security_id
         return await dhan_gateway.quote_prices(mapping, creds)
+
+    async def fetch_candles(self, symbol: str):
+        """Fetch the existing 15-minute Dhan candle series for this account."""
+        creds = self._creds
+        if creds is None and not dhan_gateway.is_dhan_configured():
+            return None
+        normalized = normalize_symbol(symbol)
+        security_id = await dhan_gateway.resolve_security_id(normalized, creds)
+        if not security_id:
+            return None
+        return await dhan_gateway.fetch_intraday_candles(normalized, security_id, creds)
 
     async def resolve_security_id(self, symbol: str) -> str | None:
         """Dhan security id for an NSE symbol. None when Dhan is not configured or the symbol is missing.
@@ -166,7 +179,7 @@ class TradingGateway:
                 )
             else:
                 placed = self._paper.fill_intraday_order(
-                    symbol, security_id, side, quantity, price, product_type=product_type
+                    symbol, security_id, side, quantity, price, product_type=product_type, tag=tag
                 )
             placed.update({"symbol": symbol, "side": side, "quantity": quantity, "price": price, "product_type": product_type})
             return placed

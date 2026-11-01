@@ -20,6 +20,7 @@ class ExecutionRepository(Protocol):
     def get(self, order_id: UUID, *, owner_id: int) -> ExecutionResult | None: ...
     def get_by_idempotency(self, key: str, *, owner_id: int) -> ExecutionResult | None: ...
     def list_reconcilable(self, *, owner_id: int) -> list[ExecutionResult]: ...
+    def list_for_owner(self, *, owner_id: int) -> list[ExecutionResult]: ...
 
 
 class SqlAlchemyExecutionRepository:
@@ -87,6 +88,16 @@ class SqlAlchemyExecutionRepository:
                 ExecutionOrderRecord.owner_id == owner_id,
                 ExecutionOrderRecord.status.in_(statuses),
             ).order_by(ExecutionOrderRecord.submitted_at)).all()
+            return [_to_result(row) for row in rows]
+
+    def list_for_owner(self, *, owner_id: int) -> list[ExecutionResult]:
+        with self._sessions() as session:
+            rows = session.scalars(
+                select(ExecutionOrderRecord)
+                .where(ExecutionOrderRecord.owner_id == owner_id)
+                .order_by(ExecutionOrderRecord.submitted_at.desc())
+                .limit(500)
+            ).all()
             return [_to_result(row) for row in rows]
 
 

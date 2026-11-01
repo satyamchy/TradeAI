@@ -23,7 +23,7 @@ python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().d
 
 Replace `SESSION_SECRET` with a long random string. Set `ADMIN_PASSWORD`. Leave `TRADING_MODE=paper`.
 
-Keep `LIVE_TRADING_ENABLED=false` in development. Live order placement also requires `APP_ENV=production` and the explicit gate `LIVE_TRADING_ENABLED=true`; do not enable it until the integration and paper-trading release gates pass. For production configuration, use `backend/.env.production.example` as a reference and provide secrets through the host's protected secret store.
+Keep `TRADING_MODE=paper` and `LIVE_TRADING_ENABLED=false`. This application build refuses startup if live mode or the live gate is enabled. The production environment example documents secret handling and is not an authorization to enable live orders.
 
 Start the API:
 
@@ -70,7 +70,7 @@ python -m pytest tests -q
 
 | Name | Default | What to put |
 | --- | --- | --- |
-| `TRADING_MODE` | `paper` | `paper` fills inside this process. `live` sends orders through that trader's saved Dhan token. Restart after changing it. |
+| `TRADING_MODE` | `paper` | This application build supports paper execution only and refuses to start in `live` mode. |
 | `ADMIN_USERNAME` | `admin` | Login name for the first admin. |
 | `APP_NAME` | `TradeX` | Process name. |
 | `APP_ENV` | `development` | `production` refuses the default session secret, a missing `CREDENTIALS_KEY`, and `APP_DEBUG=true`. See [REPO.md](../REPO.md). |
@@ -170,7 +170,7 @@ Set `CREDENTIALS_KEY` before either save. The desk encrypts a trader token with 
 
 An admin has no Dhan form. Sign in as the trader, open Settings, paste the client id and the access token, and save. Saving again replaces the pair. The token is not shown back and is not written to the event log.
 
-Paper mode still fills inside this process. With a token saved, those fills are priced from Dhan quotes. Live mode sends the order to that trader's Dhan account. `TRADING_MODE` changes only after a restart.
+Paper mode fills inside this process. With a token saved, market-data quotes may come from Dhan; all module workflow orders remain paper fills. This application build refuses startup if `TRADING_MODE=live` or `LIVE_TRADING_ENABLED=true`.
 
 ### 3. After it is saved
 
@@ -178,6 +178,6 @@ Leave the API process running. It calls RenewToken while the current token is st
 
 Renewal does not run when the process is stopped, and it cannot revive a token that has already expired. Paste a new web token on Settings in that case.
 
-Confirm the pair before `TRADING_MODE=live`. On the trader's desk, funds and positions should be that Dhan account's. A 400 on those calls means the pair was not saved. A 502 means Dhan rejected the call.
+The saved Dhan pair is used only where existing market-data/account integrations require it. Live order execution is disabled in this application build.
 
 Orders this desk sends are NSE equity, product `INTRADAY` or `CNC`, as a market order. A live fill also parks a stop-market at Dhan. The static IP whitelist is what lets those order calls through.

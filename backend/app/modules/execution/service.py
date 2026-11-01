@@ -126,6 +126,9 @@ class ExecutionService:
     async def get_order_status(self, order_id: UUID, *, owner_id: int) -> ExecutionResult | None:
         return self._repository.get(order_id, owner_id=owner_id)
 
+    async def list_orders(self, *, owner_id: int) -> list[ExecutionResult]:
+        return self._repository.list_for_owner(owner_id=owner_id)
+
     async def cancel_order(self, order_id: UUID, *, owner_id: int) -> ExecutionResult:
         order = self._repository.get(order_id, owner_id=owner_id)
         if order is None:

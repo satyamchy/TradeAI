@@ -23,6 +23,7 @@ class MarketSnapshot(Contract):
     price: Decimal = Field(gt=0)
     captured_at: datetime
     market_open: bool
+    entries_allowed: bool = True
 
     @field_validator("captured_at")
     @classmethod
@@ -43,11 +44,14 @@ class ConfirmedPosition(Contract):
 class AccountRiskSnapshot(Contract):
     captured_at: datetime
     available_funds: Decimal = Field(ge=0)
+    available_margin: Decimal | None = Field(default=None, ge=0)
     total_exposure: Decimal = Field(ge=0)
     daily_loss: Decimal = Field(ge=0)
     kill_switch_enabled: bool = False
     pending_symbols: list[str] = Field(default_factory=list)
+    blocked_symbols: list[str] = Field(default_factory=list)
     confirmed_positions: list[ConfirmedPosition] = Field(default_factory=list)
+    configured_limits: dict[str, Decimal | int] = Field(default_factory=dict)
 
     @field_validator("captured_at")
     @classmethod

@@ -55,6 +55,10 @@ class AnalysisJobManager:
         record = self._repository.get(str(analysis_id), owner_id=owner_id)
         return _view(record) if record else None
 
+    def get_by_idempotency(self, idempotency_key: str, *, owner_id: int) -> AnalysisJobView | None:
+        record = self._repository.get_by_idempotency(idempotency_key, owner_id=owner_id)
+        return _view(record) if record else None
+
     def get_request_payload(self, analysis_id: UUID, *, owner_id: int) -> dict[str, Any] | None:
         """Owner-scoped access for an idempotent module to recover its original request."""
         return self._repository.get_request_payload(str(analysis_id), owner_id=owner_id)

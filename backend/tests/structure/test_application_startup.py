@@ -1,6 +1,7 @@
 import time
 from datetime import date
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app.application import create_app
@@ -67,6 +68,14 @@ def test_startup_compatibility_routes_and_analysis_job_contract(tmp_path, monkey
             "/api/v1/analysis/jobs",
             "/api/v1/analysis/jobs/{analysis_id}",
             "/api/v1/analysis/results/{analysis_id}",
+            "/api/v1/paper/workflows",
+            "/api/v1/paper/workflows/{analysis_id}",
+            "/api/v1/paper/workflows/{analysis_id}/advance",
+            "/api/v1/paper/decisions",
+            "/api/v1/paper/orders",
+            "/api/v1/paper/orders/{order_id}/reconcile",
+            "/api/v1/paper/positions",
+            "/api/v1/paper/positions/{symbol}/reassess",
             "/api/v1/orders/intraday",
             "/api/v1/suggestions",
             "/api/v1/events",
@@ -175,3 +184,14 @@ def test_startup_compatibility_routes_and_analysis_job_contract(tmp_path, monkey
         )
         assert preflight.status_code == 200
         assert preflight.headers["access-control-allow-origin"] == "http://localhost:5173"
+
+
+def test_application_refuses_non_paper_configuration(monkeypatch):
+    monkeypatch.setattr(settings, "app_env", "development")
+    monkeypatch.setattr(settings, "trading_mode", "live")
+    monkeypatch.setattr(settings, "live_trading_enabled", False)
+    app = create_app(analysis_provider=StructuralAnalysisProvider())
+
+    with pytest.raises(RuntimeError, match="locked to paper trading"):
+        with TestClient(app):
+            pass

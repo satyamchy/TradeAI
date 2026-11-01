@@ -16,6 +16,9 @@ class AnalysisResultService(Protocol):
 
 class EntryDecisionService(Protocol):
     async def evaluate_entry(self, request: EvaluateTradeRequest, *, owner_id: int) -> DecisionResult: ...
+    async def get_decision_for_analysis(
+        self, analysis_id: UUID, *, owner_id: int
+    ) -> DecisionResult | None: ...
 
 
 class AnalysisUnavailable(ValueError):
@@ -39,6 +42,9 @@ class AnalysisDecisionWorkflow:
         analysis = await self._analyses.get_analysis(analysis_id, owner_id=owner_id)
         if analysis is None or analysis.status is not AnalysisStatus.COMPLETED:
             raise AnalysisUnavailable("completed analysis was not found")
+        existing = await self._decisions.get_decision_for_analysis(analysis_id, owner_id=owner_id)
+        if existing is not None and existing.strategy_key == strategy_key:
+            return existing
         tokens = bind_log_context(
             module="workflows",
             analysis_id=str(analysis_id),

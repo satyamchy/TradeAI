@@ -39,15 +39,33 @@ class ExistingTradingGatewayAdapter:
         if reference_price is None:
             raise ValueError("market order requires a reference price for paper execution")
         tag = _broker_tag(intent.idempotency_key)
-        raw = await self._gateway.place_tagged_order(
-            symbol=intent.symbol,
-            security_id=intent.security_id,
-            side=intent.side.value,
-            quantity=intent.quantity,
-            price=float(reference_price),
-            product_type=intent.product_type,
-            tag=tag,
-        )
+        try:
+            raw = await self._gateway.place_tagged_order(
+                symbol=intent.symbol,
+                security_id=intent.security_id,
+                side=intent.side.value,
+                quantity=intent.quantity,
+                price=float(reference_price),
+                product_type=intent.product_type,
+                tag=tag,
+            )
+        except Exception as exc:
+            # The existing paper ledger reports known validation/capital
+            # failures before writing a fill. Translate those into a terminal
+            # broker rejection; other failures remain UNKNOWN in Module 4.
+            from app.broker.paper_ledger import PaperLedgerError
+
+            if mode is not ExecutionMode.PAPER or not isinstance(exc, PaperLedgerError):
+                raise
+            return BrokerOrderUpdate(
+                broker=self.name,
+                status="REJECTED",
+                broker_order_id=None,
+                filled_quantity=0,
+                average_fill_price=None,
+                updated_at=datetime.now(timezone.utc),
+                rejection_reason=str(exc),
+            )
         return _update(raw)
 
     async def get_order_status(self, order: ExecutionResult) -> BrokerOrderUpdate:

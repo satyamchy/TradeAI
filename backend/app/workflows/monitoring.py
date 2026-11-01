@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from typing import Protocol
-from uuid import UUID, uuid5
+from uuid import UUID
 
 from app.modules.execution.service import ExecutionServiceProtocol
 from app.modules.position_monitoring.schemas import (
@@ -13,11 +13,9 @@ from app.modules.position_monitoring.schemas import (
 )
 from app.modules.position_monitoring.service import PositionMonitoringServiceProtocol
 from app.shared.contracts import ApprovedOrderIntent, PositionEvaluation
+from app.shared.identifiers import position_id_for
 from app.shared.logging import bind_log_context, reset_log_context
 from app.workflows.schemas import ConfirmedOpenPosition
-
-
-_POSITION_NAMESPACE = UUID("acaa5b27-6c90-4ae1-a3af-8f40414c8e11")
 
 
 class ApprovedIntentReader(Protocol):
@@ -79,9 +77,11 @@ class ExecutionPositionWorkflow:
         if position is None:
             return None
 
-        position_id = intent.position_id or uuid5(
-            _POSITION_NAMESPACE,
-            f"{owner_id}:{intent.exchange}:{intent.symbol}:{intent.product_type}",
+        position_id = intent.position_id or position_id_for(
+            owner_id=owner_id,
+            exchange=intent.exchange,
+            symbol=intent.symbol,
+            product_type=intent.product_type,
         )
         monitor_input = PositionMonitorInput(
             position_id=position_id,

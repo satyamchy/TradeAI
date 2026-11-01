@@ -28,11 +28,13 @@ from app.shared.config import settings
 from app.shared.database import create_engine_for_database, create_session_factory
 from app.shared.logging import bind_log_context, configure_logging, reset_log_context
 from app.workflows.analysis import StockSelectionAnalysisWorkflow
+from app.workflows.paper_trading import PaperProviderFactories, PaperTradingServiceFactory
 
 
 def create_app(
     *,
     analysis_provider: AnalysisProvider | None = None,
+    paper_provider_factories: PaperProviderFactories | None = None,
 ) -> FastAPI:
     """Create the app and compose lazy services during its single lifespan."""
     app_settings = settings
@@ -41,6 +43,8 @@ def create_app(
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         app_settings.validate_runtime()
+        if app_settings.trading_mode.strip().lower() != "paper" or app_settings.live_trading_enabled:
+            raise RuntimeError("This application build is locked to paper trading; live trading must remain disabled")
         db.init_db()
         engine = create_engine_for_database(app_settings.database_path)
         sessions = create_session_factory(engine)
@@ -67,6 +71,15 @@ def create_app(
             stock_selection_service,
             analysis_service,
         )
+        paper_trading_service_factory = PaperTradingServiceFactory(
+            sessions=sessions,
+            job_manager=manager,
+            candidates=stock_selection_service,
+            analyses=analysis_service,
+            analysis_workflow=stock_selection_analysis_workflow,
+            config=app_settings,
+            provider_factories=paper_provider_factories,
+        )
         worker = AnalysisJobWorker(manager, analysis_service.handle_job)
         app.state.db_engine = engine
         app.state.db_session_factory = sessions
@@ -74,6 +87,7 @@ def create_app(
         app.state.stock_selection_service = stock_selection_service
         app.state.analysis_service = analysis_service
         app.state.stock_selection_analysis_workflow = stock_selection_analysis_workflow
+        app.state.paper_trading_service_factory = paper_trading_service_factory
         app.state.analysis_job_worker = worker
         ensure_admin()
 

@@ -29,6 +29,7 @@ from app.shared.contracts import (
     OrderSide,
     OrderType,
 )
+from app.shared.identifiers import position_id_for
 
 _INTENT_NAMESPACE = UUID("b24202c8-39c2-4d56-a4d0-df7e6c8f89af")
 
@@ -124,7 +125,7 @@ class DecisionEngineService:
                     market_at=market.captured_at,
                 ),
                 owner_id,
-                _decision_key("ENTRY", owner_id, analysis, context),
+                _decision_key("ENTRY", owner_id, analysis, policy.key, policy.version),
             )
         intent, size_codes = _size_entry(context, candidate.instrument.symbol, evaluated_at)
         if intent is None:
@@ -139,14 +140,21 @@ class DecisionEngineService:
                     market_at=market.captured_at,
                 ),
                 owner_id,
-                _decision_key("ENTRY", owner_id, analysis, context),
+                _decision_key("ENTRY", owner_id, analysis, policy.key, policy.version),
             )
-        key = _decision_key("ENTRY", owner_id, analysis, context)
+        key = _decision_key("ENTRY", owner_id, analysis, policy.key, policy.version)
         intent = intent.model_copy(
             update={
                 "decision_id": uuid5(_INTENT_NAMESPACE, key),
                 "order_intent_id": uuid5(_INTENT_NAMESPACE, "intent:" + key),
                 "idempotency_key": "decision:" + key,
+                "position_id": position_id_for(
+                    owner_id=owner_id,
+                    exchange=context.exchange,
+                    symbol=candidate.instrument.symbol,
+                    product_type=policy.product_type,
+                    trade_key=str(analysis.analysis_id),
+                ),
             }
         )
         return self._persist(
@@ -218,6 +226,16 @@ class DecisionEngineService:
     async def get_decision(self, decision_id: UUID, *, owner_id: int) -> DecisionResult | None:
         return self._repository.get(decision_id, owner_id=owner_id)
 
+    async def get_decision_for_analysis(
+        self, analysis_id: UUID, *, owner_id: int
+    ) -> DecisionResult | None:
+        return self._repository.get_for_analysis(analysis_id, owner_id=owner_id)
+
+    async def list_decisions(
+        self, *, owner_id: int, analysis_id: UUID | None = None
+    ) -> list[DecisionResult]:
+        return self._repository.list_for_owner(owner_id=owner_id, analysis_id=analysis_id)
+
     async def get_approved_intent(self, intent_id: UUID, *, owner_id: int) -> ApprovedOrderIntent | None:
         """Read only a still-approved persisted intent for the execution boundary."""
         return self._repository.get_approved_intent(intent_id, owner_id=owner_id)
@@ -264,6 +282,8 @@ def _entry_rejections(context: DecisionEvaluationContext, expected_symbol: str) 
         reasons.append("ACCOUNT_DATA_STALE")
     if not market.market_open:
         reasons.append("MARKET_CLOSED")
+    if not market.entries_allowed:
+        reasons.append("ENTRY_CUTOFF_REACHED")
     if not context.security_id:
         reasons.append("SECURITY_ID_UNRESOLVED")
     if account.kill_switch_enabled:
@@ -274,6 +294,8 @@ def _entry_rejections(context: DecisionEvaluationContext, expected_symbol: str) 
         reasons.append("NO_AVAILABLE_FUNDS")
     if any(item.symbol.upper() == expected_symbol.upper() for item in account.confirmed_positions):
         reasons.append("DUPLICATE_POSITION")
+    if any(item.upper() == expected_symbol.upper() for item in account.blocked_symbols):
+        reasons.append("POSITION_ALREADY_OPEN")
     if any(item.upper() == expected_symbol.upper() for item in account.pending_symbols):
         reasons.append("PENDING_ORDER_EXISTS")
     if len(account.confirmed_positions) >= policy.max_positions:
@@ -375,24 +397,25 @@ def _exit_rejections(
     return reason
 
 
-def _decision_key(kind: str, owner_id: int, analysis: AnalysisResult, context: DecisionEvaluationContext) -> str:
+def _decision_key(
+    kind: str,
+    owner_id: int,
+    analysis: AnalysisResult,
+    strategy_key: str,
+    strategy_version: str,
+) -> str:
+    """One entry decision per analysis/strategy, stable across request retries.
+
+    Dynamic quotes and account snapshots remain attached to the first persisted
+    evaluation. Including their timestamps here would let simultaneous retries
+    create separate approved intents and submit duplicate paper orders.
+    """
     body = {
         "kind": kind,
         "owner": owner_id,
         "analysis": str(analysis.analysis_id),
-        "analysis_status": analysis.status.value,
-        "analysis_direction": analysis.direction.value,
-        "analysis_rating": analysis.source_rating,
-        "analysis_completed": _time_string(analysis.completed_at),
-        "symbol": context.market.symbol.upper(),
-        "price": str(context.market.price),
-        "market_at": _time_string(context.market.captured_at),
-        "market_open": context.market.market_open,
-        "account": context.account.model_dump(mode="json"),
-        "policy": context.policy.model_dump(mode="json"),
-        "security_id": context.security_id,
-        "exchange": context.exchange,
-        "segment": context.segment,
+        "strategy": strategy_key,
+        "strategy_version": strategy_version,
     }
     return _hash(body)
 

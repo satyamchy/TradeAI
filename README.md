@@ -41,8 +41,8 @@ Open `backend/.env` and set these before the first start:
 | `ADMIN_PASSWORD` | Password for that admin. Required. The account is created only when `tradex.db` has no users. There is no public signup. |
 | `SESSION_SECRET` | A long random string. It signs the login cookie. |
 | `CREDENTIALS_KEY` | A Fernet key. Traders save a Dhan client id and access token from Settings. Those values are encrypted with this key. |
-| `TRADING_MODE` | `paper` until you intend to send orders to the exchange. |
-| `LIVE_TRADING_ENABLED` | Keep `false` during development, validation, and paper testing. Live requests require `APP_ENV=production`, `TRADING_MODE=live`, and this separate gate to be `true`. |
+| `TRADING_MODE` | Keep `paper`. This application build refuses to start in `live` mode. |
+| `LIVE_TRADING_ENABLED` | Keep `false`. This application build refuses startup if the live gate is enabled. |
 
 Generate the Fernet key from the activated virtualenv:
 
@@ -86,15 +86,15 @@ The client calls `http://localhost:8000` unless `frontend/.env` sets `VITE_API_U
 - API: http://localhost:8000
 - API reference: http://localhost:8000/docs
 
-Sign in as the admin. Create a trader from Users. An admin does not place orders. The trader signs in, saves Dhan credentials on Settings if they will trade live, and uses Orders.
+Sign in as the admin. Create a trader from Users. An admin does not place orders. A trader may save Dhan credentials for market-data quotes; this build routes all module workflows through paper execution only.
 
 ### Paper and live
 
-`TRADING_MODE=paper` fills orders inside this process. Prices still come from Dhan when a token is configured. Live execution is fail-closed unless all three settings are explicit: `APP_ENV=production`, `TRADING_MODE=live`, and `LIVE_TRADING_ENABLED=true`. Keep the gate false until the system has passed module integration, failure-recovery, and paper end-to-end validation. The settings are read at process startup. Enabling automation does not switch paper to live.
+`TRADING_MODE=paper` fills orders inside this process. Prices may come from Dhan market-data quotes when a token is configured. Live trading is disabled in this build: startup refuses `TRADING_MODE=live` or `LIVE_TRADING_ENABLED=true`. Enabling automation does not switch paper to live.
 
 `backend/.env.example` is the development profile. `backend/.env.production.example` documents production-only settings; copy it to the protected host `.env` and provide secrets through the host's secret store. Neither example contains production credentials.
 
-The modular application structure is in `backend/app/modules/`, with cross-module orchestration under `workflows/` and scheduling under `harness/`. Phases 2 and 3 now provide independently tested module services and integration-tested I1–I5 workflows. FastAPI accepts typed analysis requests at `/api/v1/analysis/jobs`, starts one in-process worker, and exposes owner-scoped job status and normalized results. Decision, execution, monitoring and exit workflows use service interfaces and fake adapters in integration tests; end-to-end paper validation is still pending. See the [implementation status](.codex/tradeai_sdd_docs/implementation-status.md), [baseline report](.codex/tradeai_sdd_docs/docs/migration/baseline-report.md), [restructuring plan](.codex/tradeai_sdd_docs/docs/migration/restructuring-plan.md), and [cleanup audit](docs/CLEANUP_AUDIT.md).
+The modular application structure is in `backend/app/modules/`, with cross-module orchestration under `workflows/` and scheduling under `harness/`. Owner-scoped `/api/v1/paper` APIs connect stock selection, asynchronous analysis, Module 3 risk approval, paper execution, confirmed position monitoring and paper exits. Poll workflow status after starting analysis, advance after it completes, and request position reassessment to evaluate stops, targets and session exits. The frontend remains compatible through existing routes. See [production integration status](docs/PRODUCTION_PROVIDER_E2E_REPORT.md), the [baseline report](.codex/tradeai_sdd_docs/docs/migration/baseline-report.md), the [restructuring plan](.codex/tradeai_sdd_docs/docs/migration/restructuring-plan.md), and the [cleanup audit](docs/CLEANUP_AUDIT.md).
 
 A Dhan access token expires after 24 hours. While this process is running it renews the saved token before expiry. If the process is stopped until the token is already dead, paste a new one on Settings.
 

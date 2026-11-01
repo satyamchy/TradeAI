@@ -17,6 +17,8 @@ from app.shared.contracts import ApprovedOrderIntent
 class DecisionRepository(Protocol):
     def save(self, result: DecisionResult, *, owner_id: int, decision_key: str) -> DecisionResult: ...
     def get(self, decision_id: UUID, *, owner_id: int) -> DecisionResult | None: ...
+    def get_for_analysis(self, analysis_id: UUID, *, owner_id: int) -> DecisionResult | None: ...
+    def list_for_owner(self, *, owner_id: int, analysis_id: UUID | None = None) -> list[DecisionResult]: ...
     def get_approved_intent(self, intent_id: UUID, *, owner_id: int) -> ApprovedOrderIntent | None: ...
 
 
@@ -78,6 +80,26 @@ class SqlAlchemyDecisionRepository:
                 )
             )
             return DecisionResult.model_validate_json(record.result_json) if record else None
+
+    def get_for_analysis(self, analysis_id: UUID, *, owner_id: int) -> DecisionResult | None:
+        statement = select(DecisionRecord).where(
+            DecisionRecord.analysis_id == str(analysis_id),
+            DecisionRecord.owner_id == owner_id,
+        ).order_by(DecisionRecord.created_at.desc()).limit(1)
+        with self._sessions() as session:
+            record = session.scalar(statement)
+            return DecisionResult.model_validate_json(record.result_json) if record else None
+
+    def list_for_owner(
+        self, *, owner_id: int, analysis_id: UUID | None = None
+    ) -> list[DecisionResult]:
+        statement = select(DecisionRecord).where(DecisionRecord.owner_id == owner_id)
+        if analysis_id is not None:
+            statement = statement.where(DecisionRecord.analysis_id == str(analysis_id))
+        statement = statement.order_by(DecisionRecord.created_at.desc()).limit(500)
+        with self._sessions() as session:
+            records = session.scalars(statement).all()
+            return [DecisionResult.model_validate_json(record.result_json) for record in records]
 
     def get_approved_intent(self, intent_id: UUID, *, owner_id: int) -> ApprovedOrderIntent | None:
         with self._sessions() as session:

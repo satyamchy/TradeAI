@@ -97,6 +97,15 @@ class SqlAlchemyAnalysisJobRepository:
             )
             return record
 
+    def get_by_idempotency(self, idempotency_key: str, *, owner_id: int) -> AnalysisJobRecord | None:
+        with self._sessions() as session:
+            return session.scalar(
+                select(AnalysisJobRecord).where(
+                    AnalysisJobRecord.created_by_user_id == owner_id,
+                    AnalysisJobRecord.idempotency_key == idempotency_key,
+                )
+            )
+
     def get_request_payload(self, analysis_id: str, *, owner_id: int) -> dict[str, Any] | None:
         record = self.get(analysis_id, owner_id=owner_id)
         return json.loads(record.request_json) if record is not None else None

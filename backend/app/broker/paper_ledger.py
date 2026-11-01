@@ -93,6 +93,7 @@ class PaperLedger:
         quantity: int,
         price: float,
         product_type: str = "INTRADAY",
+        tag: str | None = None,
     ) -> dict:
         """Fill a market order immediately at `price` INR per share.
 
@@ -119,6 +120,7 @@ class PaperLedger:
             "status": "FILLED",
             "product_type": product_type,
             "broker": "paper",
+            "correlation_tag": tag,
         }
         self._state["next_order_id"] += 1
         self._state["orders"].append(order)

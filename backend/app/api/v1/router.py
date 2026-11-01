@@ -11,6 +11,7 @@ from app.api.screener import router as screener_router
 from app.api.suggestions import router as suggestions_router
 from app.api.users import router as users_router
 from app.api.v1.analysis_jobs import router as analysis_jobs_router
+from app.api.v1.paper_trading import router as paper_trading_router
 from app.api.v1.stock_selection import router as stock_selection_router
 
 router = APIRouter()
@@ -29,3 +30,4 @@ for compatibility_router in (
 
 router.include_router(analysis_jobs_router)
 router.include_router(stock_selection_router)
+router.include_router(paper_trading_router)

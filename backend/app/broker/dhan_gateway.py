@@ -483,7 +483,9 @@ async def _load_security_ids(creds: tuple[str, str] | None = None) -> dict[str, 
     return mapping
 
 
-async def fetch_intraday_candles(symbol: str, security_id: str) -> pd.DataFrame | None:
+async def fetch_intraday_candles(
+    symbol: str, security_id: str, creds: tuple[str, str] | None = None
+) -> pd.DataFrame | None:
     """15-minute OHLCV for the last week, in INR and share volume.
 
     Returns None when Dhan has no bars for this symbol. Columns are
@@ -499,6 +501,7 @@ async def fetch_intraday_candles(symbol: str, security_id: str) -> pd.DataFrame 
         from_date=from_date.strftime("%Y-%m-%d"),
         to_date=to_date.strftime("%Y-%m-%d"),
         interval=15,
+        creds=creds,
     )
     payload = _payload(response)
     if not isinstance(payload, dict) or not payload.get("close"):

@@ -1,24 +1,22 @@
-﻿# TradeX API
+# TradeX API
 
-FastAPI on port 8000. How to run it, the three roles, and paper versus live are in the [root README](../README.md). Production is in [REPO.md](../REPO.md).
+FastAPI runs on port 8000. Setup instructions are in the [root README](../README.md); deployment notes are in [REPO.md](../REPO.md).
 
-The app is composed in `app/application.py`; `main.py` remains the compatibility launcher. The five business packages are under `app/modules/`. Existing route handlers remain mounted as API compatibility adapters. Shared settings, database/session utilities, security, and structured logging are under `app/shared/`. Cross-module coordination belongs under `app/workflows/`; the existing single automation runner is exposed through `app/harness/`.
+The single composition root is `app/application.py`; `main.py` remains the compatibility launcher. Five business packages live under `app/modules/`. Shared database/session, settings, security, market data and logging interfaces live under `app/shared/` or the existing `app/market/`. Cross-module coordination belongs under `app/workflows/`. The existing automation runner remains the single scheduler.
 
-SQLite schema changes are managed only by Alembic. The configured `DATABASE_PATH` remains `tradex.db` by default. Startup backs up and adopts a recognized legacy database before applying revisions; an unknown or incomplete legacy schema fails closed. Legacy CRUD functions remain temporarily available through the same file. Revisions 004–008 add only module-owned candidate, analysis, decision/intent, execution lifecycle and monitoring-trigger tables. All five module services have independent fake-based tests, and workflows I1–I5 have integration tests against temporary SQLite.
+SQLite schema changes are managed by Alembic. The configured database path remains `tradex.db` by default, and legacy CRUD interfaces continue to use the same file. Existing compatibility routes stay mounted for the React frontend.
 
-AI Analysis includes the lazy pinned TradingAgents v0.7.1 adapter, a single in-process FastAPI worker, and normalized result persistence. `POST /api/v1/analysis/jobs` accepts a typed `AnalysisRequest` with an `Idempotency-Key`; `GET /api/v1/analysis/jobs/{analysis_id}` returns status and `GET /api/v1/analysis/results/{analysis_id}` returns the owner-scoped normalized result. The default provider constructs no external client until a submitted job is run. No real LLM smoke call has been made. Execution accepts persisted approved-intent IDs, reserves idempotency before broker calls, and reconciles fills through an adapter wrapping the existing single `TradingGateway`. Live trading remains gated off. Position Monitoring returns deduplicated exit candidates; the workflow routes new triggers through Module 3 and then Module 4, and never submits directly.
+AI Analysis uses the lazy pinned TradingAgents v0.7.1 adapter, one in-process FastAPI worker, and normalized result persistence. `POST /api/v1/analysis/jobs` accepts a typed request and an `Idempotency-Key`; owner-scoped GET routes return job status and results. Automated tests use fake analysis output and make no paid LLM calls.
 
-I2–I5 are composed as injectable workflows and verified using fake market, account and broker services. They are not yet connected to new public order routes or a real-data end-to-end lifecycle. Keep the existing guarded legacy routes and frontend behavior while those providers are reviewed. No Dhan call, live order or paid model call was used by the structural/integration tests.
+The public paper lifecycle APIs are under `/api/v1/paper`: start and poll a workflow, advance completed analysis through Module 3 risk approval and paper BUY, view decisions/orders/confirmed positions, reconcile an uncertain order, and request position reassessment through Module 5 and Module 3 before paper SELL. The client cannot submit market prices, capital, positions, risk limits, decisions or order quantities. The existing `TradingGateway` and `PaperLedger` remain the single execution path.
 
-Live order placement requires `APP_ENV=production`, `TRADING_MODE=live`, and `LIVE_TRADING_ENABLED=true`. The safety gate defaults to false. Keep it false throughout structural tests, integration work, and paper trading.
+This build is locked to `TRADING_MODE=paper` and `LIVE_TRADING_ENABLED=false`; FastAPI refuses startup if live mode or the live gate is enabled. Position reassessment is request-driven; the existing scheduler is not duplicated or connected to the new API workflow. The frontend remains compatible through its current routes.
 
-Route behavior and status codes are the docstrings on the handlers. FastAPI publishes them at `/docs`.
+End-to-end and failure-recovery evidence is in `tests/end_to_end/README.md`. Route behavior and status codes are documented in handler docstrings and FastAPI's `/docs` page.
 
-Run one process. Do not add uvicorn workers. SQLite, the order lock, and the automation loop live in this process.
+Run one process from this directory:
 
-From this directory, with the virtualenv active:
-
-```text
+```powershell
 python main.py
 python -m pytest tests -q
 ```
